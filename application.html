@@ -1,0 +1,557 @@
+<!doctype html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TrackFlow | Formulario de aplicacion</title>
+    <meta
+      name="description"
+      content="Formulario de aplicacion de TrackFlow para marcas e-commerce que buscan optimizar inventario, ultima milla y devoluciones en Estados Unidos y Espana."
+    />
+    <meta name="author" content="TrackFlow" />
+
+    <meta property="og:title" content="TrackFlow | Formulario de aplicacion" />
+    <meta
+      property="og:description"
+      content="Comparte los detalles de tu operacion y recibe una propuesta logistica adaptada a tu empresa."
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:image" content="logo-trackFlow.png" />
+
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="TrackFlow | Formulario de aplicacion" />
+    <meta
+      name="twitter:description"
+      content="Solicita una evaluacion operativa con TrackFlow y acelera tu crecimiento logistico."
+    />
+
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+      tailwind.config = {
+        theme: {
+          extend: {
+            fontFamily: {
+              sans: ["Sora", "ui-sans-serif", "system-ui", "sans-serif"],
+            },
+            colors: {
+              brandBlue: "#0A3B8A",
+              brandBlueDeep: "#041A4A",
+              brandCyan: "#15B9FF",
+              brandOrange: "#FF6A00",
+              brandCream: "#FFF7EE",
+            },
+            boxShadow: {
+              glow: "0 10px 35px rgba(10, 59, 138, 0.22)",
+            },
+          },
+        },
+      };
+    </script>
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        "name": "TrackFlow",
+        "url": "https://www.trackflow.com",
+        "logo": "logo-trackFlow.png",
+        "description": "Empresa de logistica de ultima milla y gestion de almacenes para marcas e-commerce en Estados Unidos y Espana.",
+        "foundingDate": "2009",
+        "contactPoint": {
+          "@type": "ContactPoint",
+          "contactType": "sales",
+          "email": "sales@trackflow.com",
+          "telephone": "+1-213-555-0149",
+          "availableLanguage": ["Spanish", "English"]
+        },
+        "address": [
+          {
+            "@type": "PostalAddress",
+            "addressLocality": "Los Angeles",
+            "addressCountry": "US"
+          },
+          {
+            "@type": "PostalAddress",
+            "addressLocality": "Zaragoza",
+            "addressCountry": "ES"
+          }
+        ]
+      }
+    </script>
+
+    <script src="validation.js" defer></script>
+  </head>
+
+  <body class="bg-white font-sans text-slate-900 antialiased">
+    <a
+      href="#formulario-aplicacion"
+      class="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-brandBlue focus:px-4 focus:py-2 focus:text-white"
+    >
+      Saltar al formulario
+    </a>
+
+    <header class="hidden border-b border-slate-200/70 bg-white md:block" role="banner">
+      <div class="mx-auto flex max-w-7xl items-center justify-center px-4 py-4 sm:px-6 md:justify-between lg:px-8">
+        <a href="index.html" class="flex items-center gap-3" aria-label="Ir a la pagina principal de TrackFlow">
+          <img src="logo-trackFlow.png" alt="Logo de TrackFlow" class="h-12 w-auto" />
+          <span class="hidden text-sm font-semibold text-slate-700 sm:inline">Formulario de aplicacion</span>
+        </a>
+        <a
+          href="index.html"
+          class="rounded-full border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-brandBlue hover:text-brandBlue"
+        >
+          Volver al sitio
+        </a>
+      </div>
+    </header>
+
+    <main id="formulario-aplicacion" class="relative isolate overflow-hidden py-10 pb-24 sm:py-14 md:pb-0" aria-labelledby="titulo-formulario">
+      <div
+        class="pointer-events-none absolute inset-0 -z-10 bg-[radial-gradient(circle_at_8%_10%,rgba(21,185,255,0.22),transparent_35%),radial-gradient(circle_at_92%_15%,rgba(255,106,0,0.20),transparent_35%),linear-gradient(180deg,#f8fbff_0%,#ffffff_46%)]"
+        aria-hidden="true"
+      ></div>
+
+      <section class="mx-auto max-w-5xl px-4 sm:px-6 lg:px-8" aria-label="Introduccion del formulario">
+        <p class="inline-flex rounded-full border border-brandBlue/20 bg-brandBlue/5 px-3 py-1 text-xs font-bold uppercase tracking-widest text-brandBlue">
+          Solicitud comercial B2B
+        </p>
+        <h1 id="titulo-formulario" class="mt-4 text-3xl font-extrabold leading-tight text-brandBlueDeep sm:text-4xl">
+          Cuentanos tu operacion y diseñamos tu plan TrackFlow
+        </h1>
+        <p class="mt-4 max-w-3xl text-sm leading-relaxed text-slate-700 sm:text-base">
+          Este registro nos ayuda a entender volumen, mercados, transportistas y prioridades operativas para construir una propuesta alineada con tu crecimiento en Estados Unidos y Espana.
+        </p>
+      </section>
+
+      <section class="mx-auto mt-8 max-w-5xl px-4 sm:px-6 lg:px-8">
+        <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-xl sm:p-8">
+          <form id="application-form" class="space-y-7" novalidate aria-describedby="form-help-text">
+            <p id="form-help-text" class="text-xs font-medium text-slate-600">
+              Los campos marcados con <span aria-hidden="true">*</span> son obligatorios.
+            </p>
+
+            <fieldset class="rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend class="px-2 text-sm font-bold text-brandBlueDeep">Datos personales</legend>
+              <div class="mt-3 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label for="nombre_completo" class="block text-sm font-semibold text-slate-800">Nombre completo *</label>
+                  <input
+                    id="nombre_completo"
+                    name="nombre_completo"
+                    type="text"
+                    required
+                    autocomplete="name"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="nombre_completo-error"
+                  />
+                  <p id="nombre_completo-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="cargo" class="block text-sm font-semibold text-slate-800">Cargo *</label>
+                  <input
+                    id="cargo"
+                    name="cargo"
+                    type="text"
+                    required
+                    autocomplete="organization-title"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="cargo-error"
+                  />
+                  <p id="cargo-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="email" class="block text-sm font-semibold text-slate-800">Email corporativo *</label>
+                  <input
+                    id="email"
+                    name="email"
+                    type="email"
+                    required
+                    autocomplete="email"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="email-error"
+                  />
+                  <p id="email-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="telefono" class="block text-sm font-semibold text-slate-800">Telefono de contacto *</label>
+                  <input
+                    id="telefono"
+                    name="telefono"
+                    type="tel"
+                    required
+                    autocomplete="tel"
+                    placeholder="+1 213 555 0149"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="telefono-error"
+                  />
+                  <p id="telefono-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend class="px-2 text-sm font-bold text-brandBlueDeep">Perfil de empresa</legend>
+              <div class="mt-3 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label for="nombre_empresa" class="block text-sm font-semibold text-slate-800">Nombre de la empresa *</label>
+                  <input
+                    id="nombre_empresa"
+                    name="nombre_empresa"
+                    type="text"
+                    required
+                    autocomplete="organization"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="nombre_empresa-error"
+                  />
+                  <p id="nombre_empresa-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="sitio_web" class="block text-sm font-semibold text-slate-800">Sitio web corporativo</label>
+                  <input
+                    id="sitio_web"
+                    name="sitio_web"
+                    type="url"
+                    inputmode="url"
+                    placeholder="https://www.tuempresa.com"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="sitio_web-error"
+                  />
+                  <p id="sitio_web-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="pais_operacion_principal" class="block text-sm font-semibold text-slate-800">Pais de operacion principal *</label>
+                  <select
+                    id="pais_operacion_principal"
+                    name="pais_operacion_principal"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="pais_operacion_principal-error"
+                  >
+                    <option value="">Selecciona una opcion</option>
+                    <option value="US">Estados Unidos</option>
+                    <option value="ES">Espana</option>
+                    <option value="US_ES">Estados Unidos y Espana</option>
+                  </select>
+                  <p id="pais_operacion_principal-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="mercado_objetivo" class="block text-sm font-semibold text-slate-800">Mercado objetivo principal *</label>
+                  <select
+                    id="mercado_objetivo"
+                    name="mercado_objetivo"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="mercado_objetivo-error"
+                  >
+                    <option value="">Selecciona una opcion</option>
+                    <option value="B2B">Marcas e-commerce (B2B)</option>
+                    <option value="B2C">Consumidor final (B2C)</option>
+                    <option value="B2B_B2C">Ambos modelos</option>
+                  </select>
+                  <p id="mercado_objetivo-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend class="px-2 text-sm font-bold text-brandBlueDeep">Datos operativos actuales</legend>
+              <div class="mt-3 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label for="volumen_pedidos_mensual" class="block text-sm font-semibold text-slate-800">Volumen de pedidos mensual *</label>
+                  <select
+                    id="volumen_pedidos_mensual"
+                    name="volumen_pedidos_mensual"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="volumen_pedidos_mensual-error"
+                  >
+                    <option value="">Selecciona una opcion</option>
+                    <option value="0_1000">0 a 1,000 pedidos</option>
+                    <option value="1001_10000">1,001 a 10,000 pedidos</option>
+                    <option value="10001_50000">10,001 a 50,000 pedidos</option>
+                    <option value="50000_plus">Mas de 50,000 pedidos</option>
+                  </select>
+                  <p id="volumen_pedidos_mensual-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="porcentaje_devoluciones" class="block text-sm font-semibold text-slate-800">Porcentaje de devoluciones actual (%) *</label>
+                  <input
+                    id="porcentaje_devoluciones"
+                    name="porcentaje_devoluciones"
+                    type="number"
+                    required
+                    min="0"
+                    max="100"
+                    step="0.1"
+                    placeholder="18"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="porcentaje_devoluciones-error"
+                  />
+                  <p id="porcentaje_devoluciones-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="numero_skus_activos" class="block text-sm font-semibold text-slate-800">Numero de SKU activos *</label>
+                  <input
+                    id="numero_skus_activos"
+                    name="numero_skus_activos"
+                    type="number"
+                    required
+                    min="1"
+                    step="1"
+                    placeholder="1500"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="numero_skus_activos-error"
+                  />
+                  <p id="numero_skus_activos-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="almacen_preferente" class="block text-sm font-semibold text-slate-800">Almacen preferente para iniciar *</label>
+                  <select
+                    id="almacen_preferente"
+                    name="almacen_preferente"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="almacen_preferente-error"
+                  >
+                    <option value="">Selecciona una opcion</option>
+                    <option value="los_angeles">Los Angeles</option>
+                    <option value="zaragoza">Zaragoza</option>
+                    <option value="ambos">Ambos</option>
+                  </select>
+                  <p id="almacen_preferente-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+              </div>
+
+              <div class="mt-6">
+                <p class="text-sm font-semibold text-slate-800">Transportistas que ya utilizas *</p>
+                <p class="mt-1 text-xs text-slate-600">Selecciona al menos uno.</p>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4" role="group" aria-labelledby="transportistas-group-label">
+                  <span id="transportistas-group-label" class="sr-only">Transportistas actuales</span>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="UPS" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    UPS
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="FedEx" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    FedEx
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="DHL" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    DHL
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="MRW" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    MRW
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="SEUR" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    SEUR
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="transportista_local_1" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Transportista local 1
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="transportistas" value="transportista_local_2" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Transportista local 2
+                  </label>
+                </div>
+                <p id="transportistas-error" class="mt-2 hidden text-xs font-semibold text-red-700" role="alert"></p>
+              </div>
+            </fieldset>
+
+            <fieldset class="rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend class="px-2 text-sm font-bold text-brandBlueDeep">Necesidades y alcance del proyecto</legend>
+
+              <div>
+                <p class="text-sm font-semibold text-slate-800">Servicios que te interesan de TrackFlow Tech *</p>
+                <p class="mt-1 text-xs text-slate-600">Selecciona al menos uno para priorizar la propuesta.</p>
+                <div class="mt-3 grid gap-3 sm:grid-cols-2" role="group" aria-labelledby="servicios-group-label">
+                  <span id="servicios-group-label" class="sr-only">Servicios de interes</span>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="inventario_unificado" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    API de inventario unificada
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="tracking_unificado" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Endpoint unificado de tracking
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="seleccion_transportista" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Motor de seleccion de transportista
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="devoluciones_automaticas" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Automatizacion de devoluciones
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="cx_automatizada" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Agente de CX y tickets unificados
+                  </label>
+                  <label class="flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm">
+                    <input type="checkbox" name="servicios_interes" value="dashboard_ejecutivo" class="h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue" />
+                    Dashboard ejecutivo en tiempo real
+                  </label>
+                </div>
+                <p id="servicios_interes-error" class="mt-2 hidden text-xs font-semibold text-red-700" role="alert"></p>
+              </div>
+
+              <div class="mt-5 grid gap-4 md:grid-cols-2">
+                <div>
+                  <label for="sistemas_actuales" class="block text-sm font-semibold text-slate-800">Sistemas actuales (SGA, ERP, scripts, etc.) *</label>
+                  <textarea
+                    id="sistemas_actuales"
+                    name="sistemas_actuales"
+                    required
+                    rows="4"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="sistemas_actuales-error"
+                  ></textarea>
+                  <p id="sistemas_actuales-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="reto_principal" class="block text-sm font-semibold text-slate-800">Reto principal que quieres resolver *</label>
+                  <textarea
+                    id="reto_principal"
+                    name="reto_principal"
+                    required
+                    rows="4"
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="reto_principal-error"
+                  ></textarea>
+                  <p id="reto_principal-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="fecha_objetivo" class="block text-sm font-semibold text-slate-800">Fecha objetivo para iniciar *</label>
+                  <input
+                    id="fecha_objetivo"
+                    name="fecha_objetivo"
+                    type="date"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="fecha_objetivo-error"
+                  />
+                  <p id="fecha_objetivo-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+
+                <div>
+                  <label for="presupuesto_rango" class="block text-sm font-semibold text-slate-800">Rango de presupuesto mensual estimado *</label>
+                  <select
+                    id="presupuesto_rango"
+                    name="presupuesto_rango"
+                    required
+                    class="mt-1 w-full rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-sm outline-none transition focus:border-brandBlue focus:ring-2 focus:ring-brandBlue/20"
+                    aria-describedby="presupuesto_rango-error"
+                  >
+                    <option value="">Selecciona una opcion</option>
+                    <option value="menos_5000">Menos de 5,000 EUR</option>
+                    <option value="5000_15000">5,000 a 15,000 EUR</option>
+                    <option value="15001_50000">15,001 a 50,000 EUR</option>
+                    <option value="50000_plus">Mas de 50,000 EUR</option>
+                  </select>
+                  <p id="presupuesto_rango-error" class="mt-1 hidden text-xs font-semibold text-red-700" role="alert"></p>
+                </div>
+              </div>
+            </fieldset>
+
+            <fieldset class="rounded-2xl border border-slate-200 p-4 sm:p-5">
+              <legend class="px-2 text-sm font-bold text-brandBlueDeep">Consentimiento</legend>
+              <div class="space-y-2">
+                <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm">
+                  <input
+                    id="acepta_politica"
+                    name="acepta_politica"
+                    type="checkbox"
+                    required
+                    class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue"
+                    aria-describedby="acepta_politica-error"
+                  />
+                  <span>Acepto la politica de privacidad y el tratamiento de datos para gestionar esta aplicacion. *</span>
+                </label>
+                <p id="acepta_politica-error" class="hidden text-xs font-semibold text-red-700" role="alert"></p>
+
+                <label class="flex items-start gap-3 rounded-lg border border-slate-200 px-3 py-3 text-sm">
+                  <input
+                    id="acepta_comunicaciones"
+                    name="acepta_comunicaciones"
+                    type="checkbox"
+                    class="mt-0.5 h-4 w-4 rounded border-slate-300 text-brandBlue focus:ring-brandBlue"
+                  />
+                  <span>Acepto recibir comunicaciones comerciales sobre soluciones de TrackFlow.</span>
+                </label>
+              </div>
+            </fieldset>
+
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p class="text-xs text-slate-600">
+                Validamos esta informacion antes de enviarla para asegurar una propuesta precisa.
+              </p>
+              <button
+                type="submit"
+                class="inline-flex items-center justify-center rounded-full bg-brandOrange px-6 py-3 text-sm font-bold text-white shadow-glow transition hover:brightness-110"
+              >
+                Enviar aplicacion
+              </button>
+            </div>
+          </form>
+
+          <div
+            id="success-message"
+            class="mt-6 hidden rounded-xl border border-emerald-300 bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-800"
+            role="status"
+            aria-live="polite"
+          ></div>
+        </div>
+      </section>
+    </main>
+
+    <nav
+      class="fixed inset-x-0 bottom-0 z-40 border-t border-slate-200 bg-white/95 backdrop-blur md:hidden"
+      aria-label="Bottom bar de navegacion movil"
+    >
+      <ul class="mx-auto grid max-w-7xl grid-cols-3 items-center gap-2 px-2 py-2 text-xs font-semibold text-slate-700">
+        <li>
+          <a href="index.html" class="flex items-center justify-center rounded-lg px-3 py-2 transition hover:bg-slate-100">
+            Inicio
+          </a>
+        </li>
+        <li>
+          <a href="#titulo-formulario" class="flex items-center justify-center rounded-lg px-3 py-2 transition hover:bg-slate-100">
+            Formulario
+          </a>
+        </li>
+        <li>
+          <a href="#application-form" class="flex items-center justify-center rounded-lg px-3 py-2 text-brandOrange transition hover:bg-brandCream">
+            Enviar
+          </a>
+        </li>
+      </ul>
+    </nav>
+
+    <footer class="mt-12 bg-slate-950 pb-24 text-slate-200 md:pb-0" aria-label="Pie de pagina">
+      <div class="mx-auto max-w-7xl px-4 py-8 text-sm sm:px-6 lg:px-8">
+        <p class="font-semibold text-white">TrackFlow</p>
+        <p class="mt-1">Email: sales@trackflow.com | Telefono: +1 213 555 0149</p>
+        <p class="mt-1">Los Angeles, Estados Unidos · Zaragoza, Espana</p>
+      </div>
+    </footer>
+  </body>
+</html>
