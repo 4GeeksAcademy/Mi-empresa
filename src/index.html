@@ -1,0 +1,943 @@
+<!doctype html>
+<html lang="es">
+	<head>
+		<meta charset="UTF-8" />
+		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+		<title>TrackFlow Lab | Pruebas de utilidades TS</title>
+		<script src="https://cdn.tailwindcss.com"></script>
+		<script>
+			tailwind.config = {
+				theme: {
+					extend: {
+						fontFamily: {
+							sans: ["Sora", "ui-sans-serif", "system-ui", "sans-serif"],
+						},
+						colors: {
+							ink: "#0f172a",
+							electric: "#0077ff",
+							mint: "#13d8a3",
+							ember: "#ff6a3d",
+							cloud: "#eff6ff",
+						},
+						boxShadow: {
+							soft: "0 16px 40px rgba(15, 23, 42, 0.12)",
+						},
+					},
+				},
+			};
+		</script>
+		<link rel="preconnect" href="https://fonts.googleapis.com" />
+		<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+		<link
+			href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700;800&display=swap"
+			rel="stylesheet"
+		/>
+	</head>
+	<body class="min-h-screen bg-[radial-gradient(circle_at_10%_10%,#dbeafe_0%,transparent_30%),radial-gradient(circle_at_90%_15%,#ccfbf1_0%,transparent_28%),linear-gradient(180deg,#ffffff_0%,#f8fafc_100%)] font-sans text-ink">
+		<main class="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+			<header class="mb-8 rounded-3xl border border-slate-200 bg-white/80 p-6 shadow-soft backdrop-blur">
+				<p class="text-xs font-bold uppercase tracking-[0.2em] text-electric">TrackFlow Tech Lab</p>
+				<h1 class="mt-2 text-3xl font-extrabold text-ink sm:text-4xl">Frontend de pruebas manuales</h1>
+				<p class="mt-3 max-w-3xl text-sm text-slate-600 sm:text-base">
+					Simula operaciones de colecciones para envios y valida reglas de negocio con controles interactivos.
+					Este panel cubre filtrado, ordenamiento, busqueda lineal, busqueda binaria y reportes.
+				</p>
+			</header>
+
+			<section class="grid gap-6 lg:grid-cols-[1.1fr_1fr]">
+				<article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft sm:p-6">
+					<h2 class="text-xl font-bold text-ink">Controles de pruebas</h2>
+
+					<div class="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+						<label class="text-sm font-medium text-slate-700">
+							Filtrar por destino
+							<select id="filter-country" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-electric focus:outline-none">
+								<option value="ALL">Todos</option>
+								<option value="US">US</option>
+								<option value="ES">ES</option>
+							</select>
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Filtrar por estado
+							<select id="filter-status" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-electric focus:outline-none">
+								<option value="ALL">Todos</option>
+								<option value="PENDIENTE">PENDIENTE</option>
+								<option value="EN_PREPARACION">EN_PREPARACION</option>
+								<option value="EN_TRANSITO">EN_TRANSITO</option>
+								<option value="ENTREGADO">ENTREGADO</option>
+								<option value="INCIDENCIA">INCIDENCIA</option>
+								<option value="DEVUELTO">DEVUELTO</option>
+							</select>
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Filtrar por urgencia
+							<select id="filter-priority" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-electric focus:outline-none">
+								<option value="ALL">Todos</option>
+								<option value="BAJA">BAJA</option>
+								<option value="MEDIA">MEDIA</option>
+								<option value="ALTA">ALTA</option>
+								<option value="URGENTE">URGENTE</option>
+							</select>
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Peso min (kg)
+							<input id="filter-min-weight" type="number" step="0.1" placeholder="Ej: 1.5" class="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-electric focus:outline-none" />
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Peso max (kg)
+							<input id="filter-max-weight" type="number" step="0.1" placeholder="Ej: 5.0" class="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-electric focus:outline-none" />
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Ordenar por
+							<select id="sort-field" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-electric focus:outline-none">
+								<option value="pesoKg">pesoKg</option>
+								<option value="fechaCreacion">fechaCreacion</option>
+								<option value="fechaEntregaEstimada">fechaEntregaEstimada</option>
+								<option value="urgencia">urgencia</option>
+								<option value="destino">destino</option>
+							</select>
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Direccion
+							<select id="sort-order" class="mt-2 w-full rounded-xl border border-slate-300 bg-white px-3 py-2 text-sm focus:border-electric focus:outline-none">
+								<option value="asc">Ascendente</option>
+								<option value="desc">Descendente</option>
+							</select>
+						</label>
+					</div>
+
+					<div class="mt-6 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+						<button id="btn-filter" class="rounded-xl bg-electric px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110">Aplicar filtros</button>
+						<button id="btn-sort" class="rounded-xl bg-ink px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-700">Ordenar (1 campo)</button>
+						<button id="btn-sort-multi" class="rounded-xl bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white transition hover:bg-slate-800">Ordenar multiple</button>
+						<button id="btn-group" class="rounded-xl bg-sky-100 px-4 py-2.5 text-sm font-semibold text-sky-900 transition hover:bg-sky-200">Agrupar por estado</button>
+						<button id="btn-reset" class="rounded-xl border border-slate-300 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50">Reset vista</button>
+					</div>
+
+					<hr class="my-6 border-slate-200" />
+
+					<div class="grid gap-4 md:grid-cols-2">
+						<label class="text-sm font-medium text-slate-700">
+							Buscar pedido lineal por id
+							<input id="linear-id" type="text" placeholder="Ej: P-1003" class="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-mint focus:outline-none" />
+						</label>
+
+						<label class="text-sm font-medium text-slate-700">
+							Buscar por peso exacto (binaria)
+							<input id="binary-weight" type="number" step="0.1" placeholder="Ej: 2.4" class="mt-2 w-full rounded-xl border border-slate-300 px-3 py-2 text-sm focus:border-mint focus:outline-none" />
+						</label>
+					</div>
+
+					<div class="mt-4 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+						<button id="btn-linear" class="rounded-xl bg-mint px-4 py-2.5 text-sm font-semibold text-ink transition hover:brightness-105 whitespace-nowrap truncate">Buscar ID</button>
+						<button id="btn-binary" class="rounded-xl bg-cyan-100 px-4 py-2.5 text-sm font-semibold text-cyan-900 transition hover:bg-cyan-200 whitespace-nowrap truncate">Buscar peso</button>
+						<button id="btn-metrics" class="rounded-xl bg-amber-100 px-4 py-2.5 text-sm font-semibold text-amber-900 transition hover:bg-amber-200 whitespace-nowrap truncate">Ver metricas</button>
+						<button id="btn-report-trackflow" class="rounded-xl bg-ember px-4 py-2.5 text-sm font-semibold text-white transition hover:brightness-110 whitespace-nowrap truncate">Ver reporte</button>
+						<button id="btn-count-consultas" class="rounded-xl bg-violet-100 px-4 py-2.5 text-sm font-semibold text-violet-900 transition hover:bg-violet-200 whitespace-nowrap truncate">Consultas/tipo</button>
+					</div>
+
+					<div class="mt-6 rounded-2xl border border-amber-200 bg-amber-50 p-4">
+						<h3 class="text-sm font-bold text-amber-900">Validaciones de negocio</h3>
+						<p class="mt-1 text-xs text-amber-800">Ejecuta validadores para transportistas, pedidos, devoluciones, incidencias, consultas y compatibilidad pedido/transportista.</p>
+						<button id="btn-validate" class="mt-3 rounded-lg bg-amber-500 px-4 py-2 text-sm font-semibold text-white hover:bg-amber-600">
+							Validar todas las entidades
+						</button>
+					</div>
+				</article>
+
+				<article class="rounded-3xl border border-slate-200 bg-white p-5 shadow-soft sm:p-6">
+					<h2 class="text-xl font-bold text-ink">Resultados</h2>
+
+					<div class="mt-4 grid gap-3 sm:grid-cols-3">
+						<div class="rounded-2xl bg-cloud p-3">
+							<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Registros visibles</p>
+							<p id="kpi-visible" class="mt-1 text-2xl font-extrabold text-electric">0</p>
+						</div>
+						<div class="rounded-2xl bg-emerald-50 p-3">
+							<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Peso promedio</p>
+							<p id="kpi-average" class="mt-1 text-2xl font-extrabold text-emerald-700">0</p>
+						</div>
+						<div class="rounded-2xl bg-orange-50 p-3">
+							<p class="text-xs font-semibold uppercase tracking-wide text-slate-500">Total peso</p>
+							<p id="kpi-sum" class="mt-1 text-2xl font-extrabold text-ember">0</p>
+						</div>
+					</div>
+
+					<div class="mt-5 overflow-hidden rounded-2xl border border-slate-200">
+						<div class="max-h-80 overflow-auto">
+							<table class="w-full min-w-[640px] border-collapse text-left text-sm">
+								<thead class="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+									<tr>
+										<th class="px-3 py-2">ID pedido</th>
+										<th class="px-3 py-2">Destino</th>
+										<th class="px-3 py-2">Urgencia</th>
+										<th class="px-3 py-2">Estado</th>
+										<th class="px-3 py-2">Peso</th>
+										<th class="px-3 py-2">Creacion</th>
+									</tr>
+								</thead>
+								<tbody id="results-table" class="divide-y divide-slate-100 bg-white"></tbody>
+							</table>
+						</div>
+					</div>
+
+					<div class="mt-5">
+						<h3 class="text-sm font-bold text-slate-700">Salida detallada</h3>
+						<pre id="output" class="mt-2 max-h-64 overflow-auto rounded-2xl bg-slate-950 p-4 text-xs text-slate-100"></pre>
+					</div>
+				</article>
+			</section>
+		</main>
+
+		<script type="module">
+			const transportistas = [
+				{
+					idTransportista: "TR-US-UPS",
+					nombre: "UPS",
+					paisesDisponibles: ["US"],
+					destinosDisponibles: ["US"],
+					activo: true,
+					pesoMaximoKg: 70,
+					urgenciasSoportadas: ["BAJA", "MEDIA", "ALTA", "URGENTE"],
+					apiTrackingDisponible: true,
+				},
+				{
+					idTransportista: "TR-ES-SEUR",
+					nombre: "SEUR",
+					paisesDisponibles: ["ES"],
+					destinosDisponibles: ["ES"],
+					activo: true,
+					pesoMaximoKg: 50,
+					urgenciasSoportadas: ["BAJA", "MEDIA", "ALTA"],
+					apiTrackingDisponible: true,
+				},
+				{
+					idTransportista: "TR-INT-DHL",
+					nombre: "DHL",
+					paisesDisponibles: ["ES", "US"],
+					destinosDisponibles: ["ES", "US"],
+					activo: true,
+					pesoMaximoKg: 80,
+					urgenciasSoportadas: ["MEDIA", "ALTA", "URGENTE"],
+					apiTrackingDisponible: true,
+				},
+			];
+
+			const pedidos = [
+				{
+					idPedido: "P-1001",
+					idCliente: "CL-001",
+					tipoCliente: "B2B",
+					origen: "US",
+					destino: "US",
+					idTransportista: "TR-US-UPS",
+					pesoKg: 2.4,
+					urgencia: "MEDIA",
+					estadoTracking: "EN_TRANSITO",
+					fechaCreacion: "2026-06-15T08:30:00.000Z",
+					fechaEntregaEstimada: "2026-06-18T18:00:00.000Z",
+					fechaEntregaReal: null,
+				},
+				{
+					idPedido: "P-1002",
+					idCliente: "CL-002",
+					tipoCliente: "CONSUMIDOR_FINAL",
+					origen: "ES",
+					destino: "ES",
+					idTransportista: "TR-ES-SEUR",
+					pesoKg: 1.1,
+					urgencia: "ALTA",
+					estadoTracking: "ENTREGADO",
+					fechaCreacion: "2026-06-14T10:00:00.000Z",
+					fechaEntregaEstimada: "2026-06-16T18:00:00.000Z",
+					fechaEntregaReal: "2026-06-16T13:40:00.000Z",
+				},
+				{
+					idPedido: "P-1003",
+					idCliente: "CL-003",
+					tipoCliente: "CONSUMIDOR_FINAL",
+					origen: "US",
+					destino: "ES",
+					idTransportista: "TR-INT-DHL",
+					pesoKg: 4.8,
+					urgencia: "URGENTE",
+					estadoTracking: "INCIDENCIA",
+					fechaCreacion: "2026-06-13T07:10:00.000Z",
+					fechaEntregaEstimada: "2026-06-17T18:00:00.000Z",
+					fechaEntregaReal: null,
+				},
+				{
+					idPedido: "P-1004",
+					idCliente: "CL-004",
+					tipoCliente: "B2B",
+					origen: "ES",
+					destino: "US",
+					idTransportista: "TR-INT-DHL",
+					pesoKg: 3.2,
+					urgencia: "MEDIA",
+					estadoTracking: "PENDIENTE",
+					fechaCreacion: "2026-06-17T11:25:00.000Z",
+					fechaEntregaEstimada: "2026-06-21T18:00:00.000Z",
+					fechaEntregaReal: null,
+				},
+			];
+
+			const devoluciones = [
+				{
+					idDevolucion: "D-2001",
+					idPedido: "P-1002",
+					estadoDevolucion: "SOLICITADA",
+					motivo: "Producto danado",
+					fechaSolicitud: "2026-06-17T09:20:00.000Z",
+					fechaResolucion: null,
+				},
+			];
+
+			const incidencias = [
+				{
+					idIncidencia: "I-3001",
+					idPedido: "P-1003",
+					idTransportista: "TR-INT-DHL",
+					descripcion: "Retraso por bloqueo aduanero",
+					estadoIncidencia: "EN_GESTION",
+					fechaReporte: "2026-06-17T11:00:00.000Z",
+					fechaResolucion: null,
+				},
+			];
+
+			const consultas = [
+				{
+					idConsulta: "Q-4001",
+					idCliente: "CL-003",
+					tipoCliente: "CONSUMIDOR_FINAL",
+					canal: "WHATSAPP",
+					idioma: "es",
+					tipoConsulta: "TRACKING",
+					idPedido: "P-1003",
+					mensaje: "Quiero saber el estado de mi pedido",
+					fechaConsulta: "2026-06-17T12:15:00.000Z",
+					estadoAgente: "RECIBIDA",
+					respuestaAutomatica: null,
+				},
+				{
+					idConsulta: "Q-4002",
+					idCliente: "CL-001",
+					tipoCliente: "B2B",
+					canal: "EMAIL",
+					idioma: "en",
+					tipoConsulta: "DEVOLUCION",
+					idPedido: "P-1002",
+					mensaje: "Please confirm return status",
+					fechaConsulta: "2026-06-18T08:45:00.000Z",
+					estadoAgente: "RESPONDIDA_AUTOMATICAMENTE",
+					respuestaAutomatica: "Return requested and pending carrier pickup.",
+				},
+			];
+
+			const outputEl = document.getElementById("output");
+			const tableEl = document.getElementById("results-table");
+			const kpiVisible = document.getElementById("kpi-visible");
+			const kpiAverage = document.getElementById("kpi-average");
+			const kpiSum = document.getElementById("kpi-sum");
+
+			const filterCountryEl = document.getElementById("filter-country");
+			const filterStatusEl = document.getElementById("filter-status");
+			const filterPriorityEl = document.getElementById("filter-priority");
+			const filterMinWeightEl = document.getElementById("filter-min-weight");
+			const filterMaxWeightEl = document.getElementById("filter-max-weight");
+			const sortFieldEl = document.getElementById("sort-field");
+			const sortOrderEl = document.getElementById("sort-order");
+			const linearIdEl = document.getElementById("linear-id");
+			const binaryWeightEl = document.getElementById("binary-weight");
+
+			let currentView = [...pedidos];
+
+			const URGENCIA_RANK = {
+				BAJA: 1,
+				MEDIA: 2,
+				ALTA: 3,
+				URGENTE: 4,
+			};
+
+			const BASE_TIPO_CONSULTA = {
+				PEDIDO: 0,
+				TRACKING: 0,
+				DEVOLUCION: 0,
+				INCIDENCIA: 0,
+			};
+
+			const filterBy = (items, predicate) => items.filter(predicate);
+			const sortBy = (items, compareFn) => [...items].sort(compareFn);
+
+			const groupBy = (items, keySelector) => {
+				return items.reduce((groups, item) => {
+					const key = keySelector(item);
+					const current = groups[key] ?? [];
+					groups[key] = [...current, item];
+					return groups;
+				}, {});
+			};
+
+			const comparePedidoByCampo = (a, b, campo) => {
+				if (campo === "pesoKg") {
+					return a.pesoKg - b.pesoKg;
+				}
+
+				if (campo === "fechaCreacion") {
+					return new Date(a.fechaCreacion).getTime() - new Date(b.fechaCreacion).getTime();
+				}
+
+				if (campo === "urgencia") {
+					return URGENCIA_RANK[a.urgencia] - URGENCIA_RANK[b.urgencia];
+				}
+
+				return a.destino.localeCompare(b.destino);
+			};
+
+			const filtrarPedidosPorCriterios = (items, criterios) => {
+				return items.filter((pedido) => {
+					if (criterios.destino !== undefined && pedido.destino !== criterios.destino) {
+						return false;
+					}
+
+					if (criterios.urgencia !== undefined && pedido.urgencia !== criterios.urgencia) {
+						return false;
+					}
+
+					if (criterios.estadoTracking !== undefined && pedido.estadoTracking !== criterios.estadoTracking) {
+						return false;
+					}
+
+					if (criterios.pesoMinKg !== undefined && pedido.pesoKg < criterios.pesoMinKg) {
+						return false;
+					}
+
+					if (criterios.pesoMaxKg !== undefined && pedido.pesoKg > criterios.pesoMaxKg) {
+						return false;
+					}
+
+					return true;
+				});
+			};
+
+			const ordenarPedidosPorMultiplesCampos = (items, criteriosOrden) => {
+				if (criteriosOrden.length === 0) {
+					return [...items];
+				}
+
+				return [...items].sort((a, b) => {
+					for (const criterio of criteriosOrden) {
+						const factor = criterio.direccion === "asc" ? 1 : -1;
+						const comparacion = comparePedidoByCampo(a, b, criterio.campo);
+
+						if (comparacion !== 0) {
+							return comparacion * factor;
+						}
+					}
+
+					return 0;
+				});
+			};
+
+			const linearSearch = (items, predicate) => {
+				for (const item of items) {
+					if (predicate(item)) {
+						return item;
+					}
+				}
+
+				return null;
+			};
+
+			const buscarPedidoLinealPorId = (items, idPedido) => {
+				return linearSearch(items, (pedido) => pedido.idPedido === idPedido);
+			};
+
+			const binarySearchByNumber = (items, target, valueSelector) => {
+				let left = 0;
+				let right = items.length - 1;
+
+				while (left <= right) {
+					const middle = Math.floor((left + right) / 2);
+					const item = items[middle];
+
+					if (!item) {
+						return null;
+					}
+
+					const value = valueSelector(item);
+
+					if (value === target) {
+						return item;
+					}
+
+					if (value < target) {
+						left = middle + 1;
+					} else {
+						right = middle - 1;
+					}
+				}
+
+				return null;
+			};
+
+			const buscarPedidoBinarioPorPeso = (items, pesoKgObjetivo) => {
+				return binarySearchByNumber(items, pesoKgObjetivo, (pedido) => pedido.pesoKg);
+			};
+
+			const countByCategory = (items, keySelector) => {
+				return items.reduce((acc, item) => {
+					const key = keySelector(item);
+					acc[key] = (acc[key] ?? 0) + 1;
+					return acc;
+				}, {});
+			};
+
+			const sumBy = (items, valueSelector) => {
+				return items.reduce((total, item) => total + valueSelector(item), 0);
+			};
+
+			const averageBy = (items, valueSelector) => {
+				if (items.length === 0) {
+					return 0;
+				}
+
+				return sumBy(items, valueSelector) / items.length;
+			};
+
+			const maxBy = (items, valueSelector) => {
+				if (items.length === 0) {
+					return null;
+				}
+
+				return items.reduce((currentMax, item) => {
+					return valueSelector(item) > valueSelector(currentMax) ? item : currentMax;
+				});
+			};
+
+			const minBy = (items, valueSelector) => {
+				if (items.length === 0) {
+					return null;
+				}
+
+				return items.reduce((currentMin, item) => {
+					return valueSelector(item) < valueSelector(currentMin) ? item : currentMin;
+				});
+			};
+
+			const contarConsultasPorTipo = (items) => {
+				const conteoParcial = countByCategory(items, (consulta) => consulta.tipoConsulta);
+
+				return {
+					...BASE_TIPO_CONSULTA,
+					...conteoParcial,
+				};
+			};
+
+			const calcularPesoTotalPedidos = (items) => sumBy(items, (pedido) => pedido.pesoKg);
+			const calcularPesoPromedioPedidos = (items) => averageBy(items, (pedido) => pedido.pesoKg);
+			const obtenerPedidoMayorPeso = (items) => maxBy(items, (pedido) => pedido.pesoKg);
+			const obtenerPedidoMenorPeso = (items) => minBy(items, (pedido) => pedido.pesoKg);
+
+			const generarReporteTrackFlow = (pedidosInput, consultasInput, devolucionesInput, incidenciasInput) => {
+				return {
+					totalPedidos: pedidosInput.length,
+					totalConsultas: consultasInput.length,
+					totalDevoluciones: devolucionesInput.length,
+					totalIncidencias: incidenciasInput.length,
+					pesoTotalKg: calcularPesoTotalPedidos(pedidosInput),
+					pesoPromedioKg: calcularPesoPromedioPedidos(pedidosInput),
+					pedidoMayorPeso: obtenerPedidoMayorPeso(pedidosInput),
+					pedidoMenorPeso: obtenerPedidoMenorPeso(pedidosInput),
+					consultasPorTipo: contarConsultasPorTipo(consultasInput),
+				};
+			};
+
+			const esFechaValida = (valor) => !Number.isNaN(Date.parse(valor));
+
+			const validarFechaMayorOIgual = (fechaInicio, fechaFin, nombreInicio, nombreFin, errores) => {
+				if (
+					esFechaValida(fechaInicio) &&
+					esFechaValida(fechaFin) &&
+					new Date(fechaFin).getTime() < new Date(fechaInicio).getTime()
+				) {
+					errores.push(`${nombreFin} no puede ser anterior a ${nombreInicio}`);
+				}
+			};
+
+			const validarTransportista = (transportista) => {
+				const errores = [];
+
+				if (!transportista.idTransportista.trim()) {
+					errores.push("Transportista.idTransportista es obligatorio");
+				}
+				if (!transportista.nombre.trim()) {
+					errores.push("Transportista.nombre es obligatorio");
+				}
+				if (!(transportista.pesoMaximoKg > 0)) {
+					errores.push("Transportista.pesoMaximoKg debe ser mayor que 0");
+				}
+				if (transportista.destinosDisponibles.length === 0) {
+					errores.push("Transportista.destinosDisponibles no puede estar vacio");
+				}
+				if (transportista.urgenciasSoportadas.length === 0) {
+					errores.push("Transportista.urgenciasSoportadas no puede estar vacio");
+				}
+				if (!transportista.apiTrackingDisponible) {
+					errores.push("Transportista.apiTrackingDisponible debe ser true para centralizar tracking en tiempo real");
+				}
+
+				return errores;
+			};
+
+			const validarPedido = (pedido) => {
+				const errores = [];
+
+				if (!pedido.idPedido.trim()) errores.push("Pedido.idPedido es obligatorio");
+				if (!pedido.idCliente.trim()) errores.push("Pedido.idCliente es obligatorio");
+				if (!pedido.idTransportista.trim()) errores.push("Pedido.idTransportista es obligatorio");
+				if (!(pedido.pesoKg > 0)) errores.push("Pedido.pesoKg debe ser mayor que 0");
+				if (!esFechaValida(pedido.fechaCreacion)) errores.push("Pedido.fechaCreacion debe ser una fecha valida");
+				if (!esFechaValida(pedido.fechaEntregaEstimada)) errores.push("Pedido.fechaEntregaEstimada debe ser una fecha valida");
+
+				validarFechaMayorOIgual(
+					pedido.fechaCreacion,
+					pedido.fechaEntregaEstimada,
+					"Pedido.fechaCreacion",
+					"Pedido.fechaEntregaEstimada",
+					errores,
+				);
+
+				if (pedido.fechaEntregaReal !== null && !esFechaValida(pedido.fechaEntregaReal)) {
+					errores.push("Pedido.fechaEntregaReal debe ser una fecha valida o null");
+				}
+
+				if (
+					pedido.estadoTracking === "ENTREGADO" &&
+					(pedido.fechaEntregaReal === null || !esFechaValida(pedido.fechaEntregaReal))
+				) {
+					errores.push("Pedido ENTREGADO requiere fechaEntregaReal valida");
+				}
+
+				if (pedido.estadoTracking !== "ENTREGADO" && pedido.fechaEntregaReal !== null) {
+					errores.push("Pedido.fechaEntregaReal solo debe existir si estadoTracking es ENTREGADO");
+				}
+
+				return errores;
+			};
+
+			const validarPedidoConTransportista = (pedido, transportista) => {
+				const errores = [];
+
+				if (pedido.idTransportista !== transportista.idTransportista) {
+					errores.push("Pedido.idTransportista no coincide con el transportista proporcionado");
+				}
+				if (!transportista.activo) {
+					errores.push("El transportista debe estar activo para asignar pedidos");
+				}
+				if (!transportista.destinosDisponibles.includes(pedido.destino)) {
+					errores.push("El transportista no cubre el destino del pedido para la seleccion por destino");
+				}
+				if (pedido.pesoKg > transportista.pesoMaximoKg) {
+					errores.push("El pedido supera el peso permitido por el transportista para la seleccion por peso");
+				}
+				if (!transportista.urgenciasSoportadas.includes(pedido.urgencia)) {
+					errores.push("El transportista no soporta la urgencia del pedido para la seleccion por urgencia");
+				}
+
+				return errores;
+			};
+
+			const validarDevolucion = (devolucion) => {
+				const errores = [];
+
+				if (!devolucion.idDevolucion.trim()) errores.push("Devolucion.idDevolucion es obligatorio");
+				if (!devolucion.idPedido.trim()) errores.push("Devolucion.idPedido es obligatorio");
+				if (!devolucion.motivo.trim()) errores.push("Devolucion.motivo es obligatorio");
+				if (!esFechaValida(devolucion.fechaSolicitud)) errores.push("Devolucion.fechaSolicitud debe ser una fecha valida");
+
+				if (devolucion.fechaResolucion !== null && !esFechaValida(devolucion.fechaResolucion)) {
+					errores.push("Devolucion.fechaResolucion debe ser una fecha valida o null");
+				}
+
+				const estadoFinal = devolucion.estadoDevolucion === "RECHAZADA" || devolucion.estadoDevolucion === "CERRADA";
+				if (estadoFinal && devolucion.fechaResolucion === null) {
+					errores.push("Devolucion en estado final requiere fechaResolucion");
+				}
+				if (!estadoFinal && devolucion.fechaResolucion !== null) {
+					errores.push("Devolucion abierta/en proceso no debe incluir fechaResolucion");
+				}
+
+				if (devolucion.fechaResolucion !== null) {
+					validarFechaMayorOIgual(
+						devolucion.fechaSolicitud,
+						devolucion.fechaResolucion,
+						"Devolucion.fechaSolicitud",
+						"Devolucion.fechaResolucion",
+						errores,
+					);
+				}
+
+				return errores;
+			};
+
+			const validarIncidenciaTransportista = (incidencia) => {
+				const errores = [];
+
+				if (!incidencia.idIncidencia.trim()) errores.push("IncidenciaTransportista.idIncidencia es obligatorio");
+				if (!incidencia.idPedido.trim()) errores.push("IncidenciaTransportista.idPedido es obligatorio");
+				if (!incidencia.idTransportista.trim()) errores.push("IncidenciaTransportista.idTransportista es obligatorio");
+				if (!incidencia.descripcion.trim()) errores.push("IncidenciaTransportista.descripcion es obligatorio");
+				if (!esFechaValida(incidencia.fechaReporte)) errores.push("IncidenciaTransportista.fechaReporte debe ser una fecha valida");
+
+				if (incidencia.fechaResolucion !== null && !esFechaValida(incidencia.fechaResolucion)) {
+					errores.push("IncidenciaTransportista.fechaResolucion debe ser una fecha valida o null");
+				}
+
+				if (
+					incidencia.estadoIncidencia === "RESUELTA" &&
+					(incidencia.fechaResolucion === null || !esFechaValida(incidencia.fechaResolucion))
+				) {
+					errores.push("IncidenciaTransportista RESUELTA requiere fechaResolucion valida");
+				}
+
+				if (incidencia.estadoIncidencia !== "RESUELTA" && incidencia.fechaResolucion !== null) {
+					errores.push("IncidenciaTransportista.fechaResolucion solo debe existir si estadoIncidencia es RESUELTA");
+				}
+
+				if (incidencia.fechaResolucion !== null) {
+					validarFechaMayorOIgual(
+						incidencia.fechaReporte,
+						incidencia.fechaResolucion,
+						"IncidenciaTransportista.fechaReporte",
+						"IncidenciaTransportista.fechaResolucion",
+						errores,
+					);
+				}
+
+				return errores;
+			};
+
+			const validarConsultaCliente = (consulta) => {
+				const errores = [];
+
+				if (!consulta.idConsulta.trim()) errores.push("ConsultaCliente.idConsulta es obligatorio");
+				if (!consulta.idCliente.trim()) errores.push("ConsultaCliente.idCliente es obligatorio");
+				if (!consulta.mensaje.trim()) errores.push("ConsultaCliente.mensaje es obligatorio");
+				if (!esFechaValida(consulta.fechaConsulta)) errores.push("ConsultaCliente.fechaConsulta debe ser una fecha valida");
+				if (consulta.idioma !== "es" && consulta.idioma !== "en") errores.push("ConsultaCliente.idioma solo puede ser es o en");
+				if (consulta.canal !== "EMAIL" && consulta.canal !== "WHATSAPP") errores.push("ConsultaCliente.canal solo puede ser EMAIL o WHATSAPP");
+
+				if (consulta.idPedido === null) {
+					errores.push("ConsultaCliente.idPedido es obligatorio para consultas de pedido, tracking, devolucion o incidencia");
+				}
+
+				if (
+					consulta.estadoAgente === "RESPONDIDA_AUTOMATICAMENTE" &&
+					(consulta.respuestaAutomatica === null || !consulta.respuestaAutomatica.trim())
+				) {
+					errores.push("ConsultaCliente RESPONDIDA_AUTOMATICAMENTE requiere respuestaAutomatica");
+				}
+
+				if (
+					consulta.estadoAgente !== "RESPONDIDA_AUTOMATICAMENTE" &&
+					consulta.respuestaAutomatica !== null
+				) {
+					errores.push("ConsultaCliente.respuestaAutomatica solo debe existir si estadoAgente es RESPONDIDA_AUTOMATICAMENTE");
+				}
+
+				return errores;
+			};
+
+			const renderTable = (items) => {
+				tableEl.innerHTML = items
+					.map(
+						(item) => `
+							<tr>
+								<td class="px-3 py-2 font-semibold text-slate-800">${item.idPedido}</td>
+								<td class="px-3 py-2">${item.destino}</td>
+								<td class="px-3 py-2">${item.urgencia}</td>
+								<td class="px-3 py-2">${item.estadoTracking}</td>
+								<td class="px-3 py-2">${item.pesoKg.toFixed(1)} kg</td>
+								<td class="px-3 py-2">${new Date(item.fechaCreacion).toLocaleDateString("es-ES")}</td>
+							</tr>
+						`,
+					)
+					.join("");
+
+				kpiVisible.textContent = String(items.length);
+				kpiAverage.textContent = `${averageBy(items, (p) => p.pesoKg).toFixed(2)} kg`;
+				kpiSum.textContent = `${sumBy(items, (p) => p.pesoKg).toFixed(2)} kg`;
+			};
+
+			const printOutput = (titulo, data) => {
+				outputEl.textContent = `${titulo}\n${"=".repeat(titulo.length)}\n\n${JSON.stringify(data, null, 2)}`;
+			};
+
+			document.getElementById("btn-filter").addEventListener("click", () => {
+				const destino = filterCountryEl.value;
+				const estadoTracking = filterStatusEl.value;
+				const urgencia = filterPriorityEl.value;
+				const pesoMin = Number(filterMinWeightEl.value);
+				const pesoMax = Number(filterMaxWeightEl.value);
+
+				const criterios = {
+					destino: destino === "ALL" ? undefined : destino,
+					estadoTracking: estadoTracking === "ALL" ? undefined : estadoTracking,
+					urgencia: urgencia === "ALL" ? undefined : urgencia,
+					pesoMinKg: Number.isNaN(pesoMin) ? undefined : pesoMin,
+					pesoMaxKg: Number.isNaN(pesoMax) ? undefined : pesoMax,
+				};
+
+				currentView = filtrarPedidosPorCriterios(pedidos, criterios);
+				renderTable(currentView);
+				printOutput("filtrarPedidosPorCriterios", { criterios, resultado: currentView });
+			});
+
+			document.getElementById("btn-sort").addEventListener("click", () => {
+				const campo = sortFieldEl.value;
+				const direccion = sortOrderEl.value;
+				const factor = direccion === "asc" ? 1 : -1;
+
+				currentView = sortBy(currentView, (a, b) => comparePedidoByCampo(a, b, campo) * factor);
+				renderTable(currentView);
+				printOutput("sortBy (1 campo)", { campo, direccion, resultado: currentView });
+			});
+
+			document.getElementById("btn-sort-multi").addEventListener("click", () => {
+				const campoPrincipal = sortFieldEl.value;
+				const dirPrincipal = sortOrderEl.value;
+				const campoSecundario = campoPrincipal === "fechaCreacion" ? "pesoKg" : "fechaCreacion";
+				const criteriosOrden = [
+					{ campo: campoPrincipal, direccion: dirPrincipal },
+					{ campo: campoSecundario, direccion: "asc" },
+				];
+
+				currentView = ordenarPedidosPorMultiplesCampos(currentView, criteriosOrden);
+				renderTable(currentView);
+				printOutput("ordenarPedidosPorMultiplesCampos", { criteriosOrden, resultado: currentView });
+			});
+
+			document.getElementById("btn-group").addEventListener("click", () => {
+				const agrupado = groupBy(currentView, (pedido) => pedido.estadoTracking);
+				printOutput("groupBy por estadoTracking", agrupado);
+			});
+
+			document.getElementById("btn-reset").addEventListener("click", () => {
+				currentView = [...pedidos];
+				renderTable(currentView);
+				printOutput("Vista reiniciada", { pedidos: currentView });
+			});
+
+			document.getElementById("btn-linear").addEventListener("click", () => {
+				const idPedido = linearIdEl.value.trim().toUpperCase();
+				const resultadoEspecifico = buscarPedidoLinealPorId(pedidos, idPedido);
+				const resultadoGenerico = linearSearch(pedidos, (pedido) => pedido.idPedido === idPedido);
+
+				printOutput("busqueda lineal", {
+					buscarPedidoLinealPorId: resultadoEspecifico ?? { message: "No encontrado" },
+					linearSearch: resultadoGenerico ?? { message: "No encontrado" },
+				});
+			});
+
+			document.getElementById("btn-binary").addEventListener("click", () => {
+				const objetivo = Number(binaryWeightEl.value);
+				if (Number.isNaN(objetivo)) {
+					printOutput("busqueda binaria", { message: "Introduce un numero valido" });
+					return;
+				}
+
+				const ordenadosPorPeso = sortBy(pedidos, (a, b) => a.pesoKg - b.pesoKg);
+				const resultadoEspecifico = buscarPedidoBinarioPorPeso(ordenadosPorPeso, objetivo);
+				const resultadoGenerico = binarySearchByNumber(ordenadosPorPeso, objetivo, (pedido) => pedido.pesoKg);
+
+				printOutput("busqueda binaria", {
+					listaOrdenada: ordenadosPorPeso,
+					buscarPedidoBinarioPorPeso: resultadoEspecifico ?? { message: "No encontrado" },
+					binarySearchByNumber: resultadoGenerico ?? { message: "No encontrado" },
+				});
+			});
+
+			document.getElementById("btn-metrics").addEventListener("click", () => {
+				printOutput("metricas de transformacion", {
+					countByCategoryEstado: countByCategory(currentView, (pedido) => pedido.estadoTracking),
+					sumByPeso: sumBy(currentView, (pedido) => pedido.pesoKg),
+					averageByPeso: averageBy(currentView, (pedido) => pedido.pesoKg),
+					maxByPeso: maxBy(currentView, (pedido) => pedido.pesoKg),
+					minByPeso: minBy(currentView, (pedido) => pedido.pesoKg),
+					calcularPesoTotalPedidos: calcularPesoTotalPedidos(currentView),
+					calcularPesoPromedioPedidos: calcularPesoPromedioPedidos(currentView),
+					obtenerPedidoMayorPeso: obtenerPedidoMayorPeso(currentView),
+					obtenerPedidoMenorPeso: obtenerPedidoMenorPeso(currentView),
+				});
+			});
+
+			document.getElementById("btn-count-consultas").addEventListener("click", () => {
+				printOutput("contarConsultasPorTipo", contarConsultasPorTipo(consultas));
+			});
+
+			document.getElementById("btn-report-trackflow").addEventListener("click", () => {
+				printOutput(
+					"generarReporteTrackFlow",
+					generarReporteTrackFlow(currentView, consultas, devoluciones, incidencias),
+				);
+			});
+
+			document.getElementById("btn-validate").addEventListener("click", () => {
+				const transportistasById = Object.fromEntries(
+					transportistas.map((transportista) => [transportista.idTransportista, transportista]),
+				);
+
+				const reporte = {
+					validarTransportista: transportistas.map((transportista) => ({
+						idTransportista: transportista.idTransportista,
+						errores: validarTransportista(transportista),
+					})),
+					validarPedido: pedidos.map((pedido) => ({
+						idPedido: pedido.idPedido,
+						errores: validarPedido(pedido),
+					})),
+					validarPedidoConTransportista: pedidos.map((pedido) => {
+						const transportista = transportistasById[pedido.idTransportista];
+						return {
+							idPedido: pedido.idPedido,
+							idTransportista: pedido.idTransportista,
+							errores: transportista
+								? validarPedidoConTransportista(pedido, transportista)
+								: ["Transportista no encontrado para el pedido"],
+						};
+					}),
+					validarDevolucion: devoluciones.map((devolucion) => ({
+						idDevolucion: devolucion.idDevolucion,
+						errores: validarDevolucion(devolucion),
+					})),
+					validarIncidenciaTransportista: incidencias.map((incidencia) => ({
+						idIncidencia: incidencia.idIncidencia,
+						errores: validarIncidenciaTransportista(incidencia),
+					})),
+					validarConsultaCliente: consultas.map((consulta) => ({
+						idConsulta: consulta.idConsulta,
+						errores: validarConsultaCliente(consulta),
+					})),
+				};
+
+				printOutput("validaciones de negocio", reporte);
+			});
+
+			renderTable(currentView);
+			printOutput("Estado inicial", {
+				pedidos,
+				consultas,
+				devoluciones,
+				incidencias,
+				transportistas,
+			});
+		</script>
+	</body>
+</html>
