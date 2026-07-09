@@ -1,0 +1,131 @@
+@import "tailwindcss";
+
+:root {
+  --background: #f4f7fb;
+  --foreground: #101a28;
+  --surface: #ffffff;
+  --surface-soft: #e8eef7;
+  --border: #d0dbea;
+  --muted: #4d607b;
+  --primary: #0059c9;
+  --primary-strong: #003f91;
+  --danger: #b42318;
+  --ok: #067647;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-plex-sans);
+  --font-mono: var(--font-plex-mono);
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-plex-sans), "Segoe UI", sans-serif;
+}
+
+a {
+  color: inherit;
+}
+
+.page-shell {
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at 10% 5%, #dceeff 0%, transparent 45%),
+    radial-gradient(circle at 92% 0%, #d7e7ff 0%, transparent 40%),
+    linear-gradient(180deg, #f8fbff 0%, #f1f5fb 60%, #eef3fa 100%);
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  box-shadow: 0 1px 2px rgb(16 24 40 / 0.05), 0 8px 24px rgb(16 24 40 / 0.06);
+}
+
+.input {
+  width: 100%;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: #fff;
+  padding: 0.6rem 0.75rem;
+  color: var(--foreground);
+}
+
+.input:focus {
+  outline: 2px solid color-mix(in srgb, var(--primary) 25%, white);
+  outline-offset: 1px;
+}
+
+.btn {
+  border-radius: 10px;
+  padding: 0.55rem 0.8rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+  transition: transform 120ms ease, background-color 120ms ease;
+}
+
+.btn:active {
+  transform: translateY(1px);
+}
+
+.btn-primary {
+  background: var(--primary);
+  color: #fff;
+}
+
+.btn-primary:hover {
+  background: var(--primary-strong);
+}
+
+.btn-secondary {
+  background: #fff;
+  border-color: var(--border);
+  color: var(--foreground);
+}
+
+.btn-danger {
+  background: #fff;
+  border-color: color-mix(in srgb, var(--danger) 35%, #fff);
+  color: var(--danger);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0.22rem 0.6rem;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border: 1px solid transparent;
+}
+
+.badge-received {
+  background: #eef4ff;
+  color: #25418e;
+  border-color: #c9d6ff;
+}
+
+.badge-in-progress {
+  background: #fff4e8;
+  color: #9a4a0b;
+  border-color: #ffd9b1;
+}
+
+.badge-selected {
+  background: #e7f9ef;
+  color: #11613e;
+  border-color: #b6ebcc;
+}
+
+.badge-discarded {
+  background: #fdecec;
+  color: #972929;
+  border-color: #f7c5c5;
+}
+
+.muted {
+  color: var(--muted);
+}
