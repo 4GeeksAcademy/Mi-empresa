@@ -7,6 +7,12 @@
 # Common local artifacts
 *.log
 .DS_Store
+**/node_modules/
+**/.next/
+**/out/
+**/.turbo/
+**/*.tsbuildinfo
+**/.vercel/
 
 # Keys and certificates
 *.pem

@@ -1,0 +1,19 @@
+@import "tailwindcss";
+
+:root {
+  --ops-ink: #0f172a;
+  --ops-teal: #0f766e;
+  --ops-lime: #84cc16;
+  --ops-amber: #f59e0b;
+}
+
+body {
+  background: #f8fafc;
+  color: var(--ops-ink);
+}
+
+.ops-bg {
+  background-image: radial-gradient(circle at 90% 5%, rgb(20 184 166 / 14%), transparent 30%),
+    radial-gradient(circle at 10% 95%, rgb(132 204 22 / 16%), transparent 28%),
+    linear-gradient(180deg, #f8fafc 0%, #f1f5f9 100%);
+}
