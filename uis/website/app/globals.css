@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+:root {
+  --brand-blue: #0a3b8a;
+  --brand-blue-deep: #041a4a;
+  --brand-cyan: #15b9ff;
+  --brand-orange: #ff6a00;
+  --brand-cream: #fff7ee;
+}
+
+body {
+  background: #ffffff;
+  color: #0f172a;
+}
+
+.brand-gradient {
+  background-image: radial-gradient(circle at 12% 10%, rgb(21 185 255 / 22%), transparent 35%),
+    radial-gradient(circle at 88% 12%, rgb(255 106 0 / 20%), transparent 35%),
+    linear-gradient(180deg, #f8fbff 0%, #ffffff 46%);
+}
+
+.soft-grid {
+  background-image: linear-gradient(rgb(15 23 42 / 6%) 1px, transparent 1px),
+    linear-gradient(90deg, rgb(15 23 42 / 6%) 1px, transparent 1px);
+  background-size: 28px 28px;
+}
