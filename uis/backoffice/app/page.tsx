@@ -1,5 +1,6 @@
 import { KpiCard } from "@/components/kpi-card";
 import { buildDashboardSnapshot } from "@/lib/trackflow-dashboard";
+import Link from "next/link";
 
 const snapshot = buildDashboardSnapshot();
 
@@ -15,6 +16,12 @@ export default function BackofficeHomePage() {
           <p className="mt-3 max-w-3xl text-sm leading-relaxed text-slate-600">
             Vista inicial para operaciones de dos paises (US/ES), con resultados calculados usando la logica de negocio TypeScript del Hito 2.
           </p>
+          <Link
+            href="/incidents-analysis"
+            className="mt-4 inline-flex rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800"
+          >
+            Ir al analizador de incidencias
+          </Link>
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

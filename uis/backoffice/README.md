@@ -14,3 +14,12 @@ El modulo app importa funciones y datos desde:
 - npm run dev
 - npm run build
 - npm run lint
+
+## Analizador de incidencias
+
+- Ruta UI: `/incidents-analysis`
+- Endpoint esperado:
+	- `POST /api/incidents/analyze`
+	- `GET /api/incidents/results/export`
+- Configuracion de URL backend en frontend:
+	- `NEXT_PUBLIC_INCIDENTS_API_URL` (por defecto `http://localhost:8000`)
