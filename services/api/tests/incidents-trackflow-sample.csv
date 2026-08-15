@@ -1,0 +1,7 @@
+incident_id,category,status,satisfaction_score
+INC-001,tracking,cerrado,4.5
+INC-002,logistica,abierto,
+INC-003,devolucion,cerrado,3.5
+INC-004,facturacion,descartado,
+INC-005,,abierto,
+INC-006,soporte,invalido,

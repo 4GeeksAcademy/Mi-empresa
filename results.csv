@@ -1,0 +1,17 @@
+metric,value
+total_processed,100
+total_valid,70
+total_invalid,30
+invalid_invalid_category,10
+invalid_invalid_status,10
+invalid_missing_required_field,10
+category_devolucion,14
+category_facturacion,14
+category_logistica,14
+category_soporte,14
+category_tracking,14
+status_abierto,17
+status_cerrado,18
+status_descartado,17
+status_en_progreso,18
+satisfaction_index_closed,3.93

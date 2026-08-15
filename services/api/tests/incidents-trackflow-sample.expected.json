@@ -1,0 +1,23 @@
+{
+  "summary": {
+    "total_processed": 6,
+    "total_valid": 4,
+    "total_invalid": 2,
+    "invalid_breakdown": {
+      "invalid_status": 1,
+      "missing_required_field": 1
+    },
+    "category_totals": {
+      "devolucion": 1,
+      "facturacion": 1,
+      "logistica": 1,
+      "tracking": 1
+    },
+    "status_totals": {
+      "abierto": 1,
+      "cerrado": 2,
+      "descartado": 1
+    },
+    "satisfaction_index_closed": 4.0
+  }
+}
