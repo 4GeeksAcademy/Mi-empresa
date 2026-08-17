@@ -23,3 +23,14 @@ El modulo app importa funciones y datos desde:
 	- `GET /api/incidents/results/export`
 - Configuracion de URL backend en frontend:
 	- `NEXT_PUBLIC_INCIDENTS_API_URL` (por defecto `http://localhost:8000`)
+
+## Directorio de proveedores
+
+- Ruta UI: `/suppliers`
+- Endpoints usados desde la UI:
+	- `POST /suppliers`
+	- `GET /suppliers?pais=&categoria=`
+	- `GET /suppliers/{id}`
+	- `PATCH /suppliers/{id}/rate`
+	- `PATCH /suppliers/{id}/status`
+	- `DELETE /suppliers/{id}`

@@ -38,3 +38,49 @@
 
 ### Decision tecnica relevante
 - En backoffice se usa webpack para dev/build porque Turbopack no resolvio imports externos del directorio src en este contexto. Se mantiene externalDir habilitado.
+
+## 2026-08-15
+
+### Objetivo de esta ejecucion
+- Implementar Directorio de Proveedores end-to-end (FastAPI + TinyDB + Next.js backoffice) con seed idempotente y validaciones estrictas.
+
+### Cambios implementados
+- Backend en `services/api`:
+	- Nuevos modelos Pydantic para proveedores en `models.py`.
+	- Repositorio TinyDB en `database.py` con CRUD y filtros por pais/categoria.
+	- Rutas REST en `routes/suppliers.py`:
+		- `POST /suppliers`
+		- `GET /suppliers`
+		- `GET /suppliers/{id}`
+		- `PATCH /suppliers/{id}/rate`
+		- `PATCH /suppliers/{id}/status`
+		- `DELETE /suppliers/{id}`
+	- Integracion del router en `main.py` sin romper endpoints de incidencias.
+	- Seeder idempotente en `seed.py`.
+	- Test suite nueva en `tests/test_suppliers.py`.
+- Frontend en `uis/backoffice`:
+	- Nueva pagina `app/suppliers/page.tsx`.
+	- Nuevo componente cliente `components/suppliers-directory.tsx` con:
+		- listado de proveedores
+		- filtros por pais/categoria sin recarga
+		- alta de proveedor
+		- actualizacion de tarifa
+		- cambio de estado activo/suspendido
+		- feedback de errores y exitos en UI
+	- Nuevas rutas proxy Next en `app/api/suppliers/**` para conectar UI con backend.
+	- Navegacion actualizada para acceso al directorio.
+
+### Validaciones ejecutadas
+- Backend:
+	- `pytest -q` en `services/api` -> OK (`7 passed`).
+	- `python seed.py` dos veces -> inserta en primera ejecucion y `0` en segunda (idempotencia OK).
+- Frontend:
+	- `npm run lint` en `uis/backoffice` -> OK.
+	- `npm run build` en `uis/backoffice` -> OK.
+
+### Decision tecnica relevante
+- Como el contexto visible no incluye un contrato de proveedores formal en archivo, se centralizaron enums y campos de dominio en `services/api/models.py` para facilitar ajuste rapido si cambia el contexto evaluador (paises US/ES, estados activo/suspendido, categorias de producto y tarifa por kg).
+
+### Riesgos y deuda tecnica
+- Si el evaluador usa un contrato de categorias o nombre de campo de tarifa distinto, sera necesario ajustar constantes de dominio y seed.
+- El flujo de CI deberia separar dependencias de runtime y test (actualmente `httpx` queda en `requirements.txt` para asegurar reproducibilidad local de pruebas).

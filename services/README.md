@@ -12,5 +12,10 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 - `api/` - FastAPI service for incidents analysis.
 	- `POST /api/incidents/analyze`: validates and analyzes uploaded CSV files.
 	- `GET /api/incidents/results/export`: exports the last analysis as `results.csv`.
+	- `POST /suppliers`: creates a supplier.
+	- `GET /suppliers`: lists suppliers with optional `pais` and `categoria` filters.
+	- `PATCH /suppliers/{id}/rate`: updates supplier rate per kg.
+	- `PATCH /suppliers/{id}/status`: updates supplier status.
+	- `DELETE /suppliers/{id}`: removes supplier by id.
 
 > _Spanish version: [README.es.md](./README.es.md)._

@@ -9,6 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from incidents import CsvFormatError, analyze_incidents_csv
+from routes.suppliers import router as suppliers_router
 
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0")
 
@@ -19,6 +20,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(suppliers_router)
 
 _last_export_csv_bytes: bytes | None = None
 
