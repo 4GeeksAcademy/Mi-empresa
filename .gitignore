@@ -44,7 +44,7 @@ yarn.lock
 .next/
 
 # ── TinyDB data (local dev only) ──
-**/data/suppliers.json
+**/data/*.json
 
 # ── OS / IDE ──
 .DS_Store

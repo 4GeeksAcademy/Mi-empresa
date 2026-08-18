@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
+from auth import get_current_user
 from database import get_suppliers_repository
 from models import (
     SupplierCategory,
@@ -17,7 +18,10 @@ router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
 
 @router.post("", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
-def create_supplier(payload: SupplierCreateInput) -> SupplierResponse:
+def create_supplier(
+    payload: SupplierCreateInput,
+    current_user: dict = Depends(get_current_user),
+) -> SupplierResponse:
     repo = get_suppliers_repository()
     return repo.create(payload)
 
@@ -47,7 +51,11 @@ def get_supplier(supplier_id: int) -> SupplierResponse:
 
 
 @router.patch("/{supplier_id}/rate", response_model=SupplierResponse)
-def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdateInput) -> SupplierResponse:
+def update_supplier_rate(
+    supplier_id: int,
+    payload: SupplierRateUpdateInput,
+    current_user: dict = Depends(get_current_user),
+) -> SupplierResponse:
     repo = get_suppliers_repository()
     updated = repo.update_rate(supplier_id, payload.tarifa_por_kg)
     if updated is None:
@@ -56,7 +64,11 @@ def update_supplier_rate(supplier_id: int, payload: SupplierRateUpdateInput) -> 
 
 
 @router.patch("/{supplier_id}/status", response_model=SupplierResponse)
-def update_supplier_status(supplier_id: int, payload: SupplierStatusUpdateInput) -> SupplierResponse:
+def update_supplier_status(
+    supplier_id: int,
+    payload: SupplierStatusUpdateInput,
+    current_user: dict = Depends(get_current_user),
+) -> SupplierResponse:
     repo = get_suppliers_repository()
     updated = repo.update_status(supplier_id, payload.status)
     if updated is None:
@@ -65,7 +77,10 @@ def update_supplier_status(supplier_id: int, payload: SupplierStatusUpdateInput)
 
 
 @router.delete("/{supplier_id}")
-def delete_supplier(supplier_id: int) -> dict[str, str]:
+def delete_supplier(
+    supplier_id: int,
+    current_user: dict = Depends(get_current_user),
+) -> dict[str, str]:
     repo = get_suppliers_repository()
     deleted = repo.delete(supplier_id)
     if not deleted:
