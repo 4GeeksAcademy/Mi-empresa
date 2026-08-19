@@ -6,12 +6,22 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
-export async function GET(_: Request, { params }: RouteParams) {
+function buildHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const auth = request.headers.get("authorization");
+  if (auth) {
+    headers["authorization"] = auth;
+  }
+  return headers;
+}
+
+export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
     const response = await fetch(`${BACKEND_BASE_URL}/suppliers/${id}`, {
       method: "GET",
+      headers: buildHeaders(request),
     });
 
     const contentType = response.headers.get("content-type") ?? "application/json";
@@ -31,12 +41,13 @@ export async function GET(_: Request, { params }: RouteParams) {
   }
 }
 
-export async function DELETE(_: Request, { params }: RouteParams) {
+export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
     const response = await fetch(`${BACKEND_BASE_URL}/suppliers/${id}`, {
       method: "DELETE",
+      headers: buildHeaders(request),
     });
 
     const contentType = response.headers.get("content-type") ?? "application/json";

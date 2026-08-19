@@ -1,0 +1,127 @@
+const AUTH_TOKEN_KEY = "auth_token";
+
+// ─── Types ────────────────────────────────────────────────────────────
+
+export interface LoginInput {
+  email: string;
+  password: string;
+}
+
+export interface RegisterInput {
+  email: string;
+  password: string;
+  role?: string;
+  name?: string;
+  phone?: string;
+  address?: string;
+}
+
+export interface ProfileData {
+  id: number;
+  user_id: number;
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+}
+
+export interface AuthUser {
+  id: number;
+  email: string;
+  role: string;
+  profile: ProfileData | null;
+}
+
+// ─── Token helpers ────────────────────────────────────────────────────
+
+export function getToken(): string | null {
+  if (typeof window === "undefined") return null;
+  return localStorage.getItem(AUTH_TOKEN_KEY);
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(AUTH_TOKEN_KEY, token);
+}
+
+export function removeToken(): void {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
+}
+
+// ─── Auth API calls ───────────────────────────────────────────────────
+
+export async function login(input: LoginInput): Promise<string> {
+  const response = await fetch("/api/auth/login", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Error al iniciar sesión.");
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+export async function register(input: RegisterInput): Promise<string> {
+  // 1. Crear usuario + auto-login via API Route proxy
+  const response = await fetch("/api/auth/register", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(input),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Error al registrar.");
+  }
+
+  const data = await response.json();
+  return data.access_token;
+}
+
+export async function getMe(token: string): Promise<AuthUser> {
+  const response = await fetch("/api/auth/me", {
+    headers: {
+      Authorization: `Bearer ${token}`,
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error("No se pudo obtener la información del usuario.");
+  }
+
+  return response.json();
+}
+
+export async function updateProfile(
+  token: string,
+  data: { name?: string | null; phone?: string | null; address?: string | null },
+): Promise<ProfileData> {
+  const response = await fetch("/api/profiles/me", {
+    method: "PUT",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${token}`,
+    },
+    body: JSON.stringify(data),
+  });
+
+  if (!response.ok) {
+    const body = await response.json().catch(() => ({}));
+    throw new Error(body.detail ?? "Error al actualizar el perfil.");
+  }
+
+  return response.json();
+}
+
+export function logout(): void {
+  removeToken();
+  window.location.href = "/login";
+}
+
+export function handleUnauthorized(): void {
+  removeToken();
+  window.location.href = "/login";
+}
