@@ -82,6 +82,16 @@ export default function LoginPage() {
             />
           </div>
 
+          <div className="text-right">
+            <Link
+              href="/forgot-password"
+              className="text-xs font-semibold"
+              style={{ color: "var(--primary)" }}
+            >
+              ¿Olvidaste tu contraseña?
+            </Link>
+          </div>
+
           <button
             type="submit"
             disabled={isLoading}

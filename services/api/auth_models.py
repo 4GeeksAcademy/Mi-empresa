@@ -111,5 +111,34 @@ class AuthMeResponse(BaseModel):
     profile: ProfileResponse | None = None
 
 
+# ── Modelos para recuperación y cambio de contraseña ──────────────────
+
+
+class ForgotPasswordInput(BaseModel):
+    email: str = Field(min_length=5, max_length=255)
+
+    @field_validator("email")
+    @classmethod
+    def validate_email(cls, value: str) -> str:
+        normalized = value.strip().lower()
+        if "@" not in normalized:
+            raise ValueError("El email debe contener un @.")
+        return normalized
+
+
+class ResetPasswordInput(BaseModel):
+    token: str = Field(min_length=1, max_length=255)
+    new_password: str = Field(min_length=6, max_length=255)
+
+
+class ChangePasswordInput(BaseModel):
+    current_password: str = Field(min_length=1, max_length=255)
+    new_password: str = Field(min_length=6, max_length=255)
+
+
+class MessageResponse(BaseModel):
+    message: str
+
+
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
