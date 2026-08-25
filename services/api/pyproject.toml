@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 package = true
 
 [tool.setuptools]
-py-modules = ["seed", "database", "models"]
+py-modules = ["seed", "database", "models", "auth_models", "auth_db", "auth"]
 
 [tool.setuptools.packages.find]
-include = ["seed*", "database*", "models*"]
+include = ["seed*", "database*", "models*", "auth_models*", "auth_db*", "auth*", "routes*"]
 
 [project]
 name = "trackflow-api"
@@ -21,6 +21,9 @@ dependencies = [
     "python-multipart>=0.0.20",
     "tinydb>=4.8",
     "httpx>=0.28",
+    "python-jose[cryptography]>=3.3",
+    "libpass[bcrypt]>=1.0",
+    "python-dotenv>=1.1",
 ]
 
 [project.optional-dependencies]
