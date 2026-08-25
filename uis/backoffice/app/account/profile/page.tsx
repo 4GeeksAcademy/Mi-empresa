@@ -30,7 +30,9 @@ export default function ProfilePage() {
       setPhone(userData.profile?.phone ?? "");
       setAddress(userData.profile?.address ?? "");
     } catch {
-      setError("No se pudo cargar la información del perfil.");
+      // Token inválido o expirado → limpiar y redirigir al login
+      localStorage.removeItem("auth_token");
+      router.push("/login");
     } finally {
       setLoading(false);
     }
@@ -42,7 +44,10 @@ export default function ProfilePage() {
 
   async function handleSave() {
     const token = getToken();
-    if (!token) return;
+    if (!token) {
+      router.push("/login");
+      return;
+    }
 
     setSaving(true);
     setSaveMessage(null);
@@ -58,8 +63,10 @@ export default function ProfilePage() {
         prev ? { ...prev, profile: updated } : prev,
       );
       setSaveMessage("Perfil actualizado correctamente.");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Error al actualizar el perfil.");
+    } catch {
+      // Token inválido o expirado → limpiar y redirigir al login
+      localStorage.removeItem("auth_token");
+      router.push("/login");
     } finally {
       setSaving(false);
     }
@@ -74,11 +81,10 @@ export default function ProfilePage() {
   }
 
   if (!user) {
-    return (
-      <main className="ops-bg flex min-h-screen items-center justify-center">
-        <p className="text-sm text-red-600">No se pudo cargar el perfil.</p>
-      </main>
-    );
+    // No debería llegar aquí porque loadProfile ya redirige,
+    // pero por seguridad, redirigir al login
+    router.push("/login");
+    return null;
   }
 
   return (

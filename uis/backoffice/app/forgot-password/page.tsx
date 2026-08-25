@@ -26,26 +26,19 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="page-shell flex min-h-screen items-center justify-center p-6">
-      <div className="card w-full max-w-sm p-8">
-        <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
+    <main className="ops-bg flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-extrabold text-slate-900">
           ¿Olvidaste tu contraseña?
         </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+        <p className="mt-1 text-sm text-slate-600">
           Introduce tu email y te enviaremos un enlace para restablecerla.
         </p>
 
         {submitted ? (
-          <div
-            className="mt-6 rounded-xl border px-4 py-4 text-sm font-medium"
-            style={{
-              borderColor: "rgb(22 163 74 / 0.2)",
-              backgroundColor: "rgb(22 163 74 / 0.06)",
-              color: "rgb(22 163 74)",
-            }}
-          >
+          <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-4 text-sm font-medium text-green-700">
             <p className="font-semibold">Enlace enviado</p>
-            <p className="mt-1" style={{ color: "var(--muted)" }}>
+            <p className="mt-1 text-slate-600">
               Si esa dirección está registrada, recibirás un enlace de
               restablecimiento en breve. Revisa tu bandeja de entrada y
               también la carpeta de spam.
@@ -54,24 +47,13 @@ export default function ForgotPasswordPage() {
         ) : (
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             {error && (
-              <div
-                className="rounded-xl border px-4 py-3 text-sm font-medium"
-                style={{
-                  borderColor: "rgb(180 35 24 / 0.2)",
-                  backgroundColor: "rgb(180 35 24 / 0.06)",
-                  color: "var(--danger)",
-                }}
-              >
+              <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
                 {error}
               </div>
             )}
 
             <div>
-              <label
-                htmlFor="email"
-                className="block text-sm font-semibold"
-                style={{ color: "var(--foreground)" }}
-              >
+              <label htmlFor="email" className="block text-sm font-semibold text-slate-700">
                 Email
               </label>
               <input
@@ -80,8 +62,7 @@ export default function ForgotPasswordPage() {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                className="input mt-1"
-                style={{ borderColor: "var(--border)" }}
+                className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
                 placeholder="usuario@ejemplo.com"
               />
             </div>
@@ -89,28 +70,15 @@ export default function ForgotPasswordPage() {
             <button
               type="submit"
               disabled={isLoading}
-              className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50"
-              style={{
-                backgroundColor: "var(--primary)",
-              }}
-              onMouseOver={(e) =>
-                (e.currentTarget.style.backgroundColor = "var(--primary-strong)")
-              }
-              onMouseOut={(e) =>
-                (e.currentTarget.style.backgroundColor = "var(--primary)")
-              }
+              className="w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-50"
             >
               {isLoading ? "Enviando enlace…" : "Enviar enlace de restablecimiento"}
             </button>
           </form>
         )}
 
-        <p className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
-          <Link
-            href="/login"
-            className="font-semibold"
-            style={{ color: "var(--primary)" }}
-          >
+        <p className="mt-6 text-center text-sm text-slate-600">
+          <Link href="/login" className="font-semibold text-teal-700 hover:text-teal-800">
             Volver al inicio de sesión
           </Link>
         </p>

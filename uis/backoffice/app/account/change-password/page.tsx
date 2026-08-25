@@ -60,26 +60,19 @@ export default function ChangePasswordPage() {
   }
 
   return (
-    <main className="page-shell flex min-h-screen items-center justify-center p-6">
-      <div className="card w-full max-w-sm p-8">
-        <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
+    <main className="ops-bg flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-extrabold text-slate-900">
           Cambiar contraseña
         </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+        <p className="mt-1 text-sm text-slate-600">
           Actualiza tu contraseña para mantener tu cuenta segura.
         </p>
 
         {success && (
-          <div
-            className="mt-6 rounded-xl border px-4 py-3 text-sm font-medium"
-            style={{
-              borderColor: "rgb(22 163 74 / 0.2)",
-              backgroundColor: "rgb(22 163 74 / 0.06)",
-              color: "rgb(22 163 74)",
-            }}
-          >
+          <div className="mt-6 rounded-xl border border-green-200 bg-green-50 px-4 py-3 text-sm font-medium text-green-700">
             <p className="font-semibold">Contraseña actualizada</p>
-            <p className="mt-1" style={{ color: "var(--muted)" }}>
+            <p className="mt-1 text-slate-600">
               Tu contraseña ha sido cambiada correctamente. Por seguridad,
               te recomendamos cerrar sesión en otros dispositivos.
             </p>
@@ -88,24 +81,13 @@ export default function ChangePasswordPage() {
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
-            <div
-              className="rounded-xl border px-4 py-3 text-sm font-medium"
-              style={{
-                borderColor: "rgb(180 35 24 / 0.2)",
-                backgroundColor: "rgb(180 35 24 / 0.06)",
-                color: "var(--danger)",
-              }}
-            >
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </div>
           )}
 
           <div>
-            <label
-              htmlFor="currentPassword"
-              className="block text-sm font-semibold"
-              style={{ color: "var(--foreground)" }}
-            >
+            <label htmlFor="currentPassword" className="block text-sm font-semibold text-slate-700">
               Contraseña actual
             </label>
             <input
@@ -114,18 +96,13 @@ export default function ChangePasswordPage() {
               required
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              className="input mt-1"
-              style={{ borderColor: "var(--border)" }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
               placeholder="••••••••"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="newPassword"
-              className="block text-sm font-semibold"
-              style={{ color: "var(--foreground)" }}
-            >
+            <label htmlFor="newPassword" className="block text-sm font-semibold text-slate-700">
               Nueva contraseña
             </label>
             <input
@@ -135,18 +112,13 @@ export default function ChangePasswordPage() {
               minLength={6}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="input mt-1"
-              style={{ borderColor: "var(--border)" }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
               placeholder="••••••••"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-semibold"
-              style={{ color: "var(--foreground)" }}
-            >
+            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700">
               Confirmar nueva contraseña
             </label>
             <input
@@ -156,8 +128,7 @@ export default function ChangePasswordPage() {
               minLength={6}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="input mt-1"
-              style={{ borderColor: "var(--border)" }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
               placeholder="••••••••"
             />
           </div>
@@ -165,34 +136,20 @@ export default function ChangePasswordPage() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{
-              backgroundColor: "var(--primary)",
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--primary-strong)")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--primary)")
-            }
+            className="w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-50"
           >
             {isLoading ? "Cambiando contraseña…" : "Cambiar contraseña"}
           </button>
         </form>
 
-        <div className="mt-6 flex flex-col gap-2 text-center text-sm" style={{ color: "var(--muted)" }}>
-          <Link
-            href="/account/profile"
-            className="font-semibold"
-            style={{ color: "var(--primary)" }}
-          >
+        <div className="mt-6 flex flex-col gap-2 text-center text-sm text-slate-600">
+          <Link href="/account/profile" className="font-semibold text-teal-700 hover:text-teal-800">
             Volver al perfil
           </Link>
           <button
             type="button"
             onClick={handleLogout}
-            className="font-semibold"
-            style={{ color: "var(--danger)" }}
+            className="font-semibold text-red-600 hover:text-red-700"
           >
             Cerrar sesión
           </button>

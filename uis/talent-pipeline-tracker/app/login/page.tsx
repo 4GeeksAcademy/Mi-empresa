@@ -82,16 +82,6 @@ export default function LoginPage() {
             />
           </div>
 
-          <div className="text-right">
-            <Link
-              href="/forgot-password"
-              className="text-xs font-semibold"
-              style={{ color: "var(--primary)" }}
-            >
-              ¿Olvidaste tu contraseña?
-            </Link>
-          </div>
-
           <button
             type="submit"
             disabled={isLoading}
@@ -106,7 +96,17 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
+        <p className="mt-4 text-center text-sm" style={{ color: "var(--muted)" }}>
+          <Link
+            href="/forgot-password"
+            className="font-semibold"
+            style={{ color: "var(--primary)" }}
+          >
+            ¿Olvidaste tu contraseña?
+          </Link>
+        </p>
+
+        <p className="mt-2 text-center text-sm" style={{ color: "var(--muted)" }}>
           ¿No tienes cuenta?{" "}
           <Link
             href="/register"

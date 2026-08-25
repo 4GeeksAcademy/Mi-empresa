@@ -18,19 +18,18 @@ function ResetPasswordForm() {
 
   if (!token) {
     return (
-      <main className="page-shell flex min-h-screen items-center justify-center p-6">
-        <div className="card w-full max-w-sm p-8">
-          <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
+      <main className="ops-bg flex min-h-screen items-center justify-center">
+        <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+          <h1 className="text-2xl font-extrabold text-slate-900">
             Enlace no válido
           </h1>
-          <p className="mt-2 text-sm" style={{ color: "var(--muted)" }}>
+          <p className="mt-2 text-sm text-slate-600">
             No se encontró un token de restablecimiento en la URL. Solicita un
             nuevo enlace.
           </p>
           <Link
             href="/forgot-password"
-            className="mt-4 inline-block font-semibold text-sm"
-            style={{ color: "var(--primary)" }}
+            className="mt-4 inline-block text-sm font-semibold text-teal-700 hover:text-teal-800"
           >
             Solicitar nuevo enlace
           </Link>
@@ -71,35 +70,24 @@ function ResetPasswordForm() {
   }
 
   return (
-    <main className="page-shell flex min-h-screen items-center justify-center p-6">
-      <div className="card w-full max-w-sm p-8">
-        <h1 className="text-2xl font-extrabold text-[var(--foreground)]">
+    <main className="ops-bg flex min-h-screen items-center justify-center">
+      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+        <h1 className="text-2xl font-extrabold text-slate-900">
           Nueva contraseña
         </h1>
-        <p className="mt-1 text-sm" style={{ color: "var(--muted)" }}>
+        <p className="mt-1 text-sm text-slate-600">
           Introduce tu nueva contraseña a continuación.
         </p>
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           {error && (
-            <div
-              className="rounded-xl border px-4 py-3 text-sm font-medium"
-              style={{
-                borderColor: "rgb(180 35 24 / 0.2)",
-                backgroundColor: "rgb(180 35 24 / 0.06)",
-                color: "var(--danger)",
-              }}
-            >
+            <div className="rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
               {error}
             </div>
           )}
 
           <div>
-            <label
-              htmlFor="newPassword"
-              className="block text-sm font-semibold"
-              style={{ color: "var(--foreground)" }}
-            >
+            <label htmlFor="newPassword" className="block text-sm font-semibold text-slate-700">
               Nueva contraseña
             </label>
             <input
@@ -109,18 +97,13 @@ function ResetPasswordForm() {
               minLength={6}
               value={newPassword}
               onChange={(e) => setNewPassword(e.target.value)}
-              className="input mt-1"
-              style={{ borderColor: "var(--border)" }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
               placeholder="••••••••"
             />
           </div>
 
           <div>
-            <label
-              htmlFor="confirmPassword"
-              className="block text-sm font-semibold"
-              style={{ color: "var(--foreground)" }}
-            >
+            <label htmlFor="confirmPassword" className="block text-sm font-semibold text-slate-700">
               Confirmar contraseña
             </label>
             <input
@@ -130,8 +113,7 @@ function ResetPasswordForm() {
               minLength={6}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              className="input mt-1"
-              style={{ borderColor: "var(--border)" }}
+              className="mt-1 block w-full rounded-lg border border-slate-300 px-3 py-2 text-sm shadow-sm focus:border-teal-600 focus:outline-none focus:ring-1 focus:ring-teal-600"
               placeholder="••••••••"
             />
           </div>
@@ -139,27 +121,14 @@ function ResetPasswordForm() {
           <button
             type="submit"
             disabled={isLoading}
-            className="w-full rounded-xl px-4 py-2.5 text-sm font-semibold text-white transition disabled:opacity-50"
-            style={{
-              backgroundColor: "var(--primary)",
-            }}
-            onMouseOver={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--primary-strong)")
-            }
-            onMouseOut={(e) =>
-              (e.currentTarget.style.backgroundColor = "var(--primary)")
-            }
+            className="w-full rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white transition hover:bg-teal-800 disabled:opacity-50"
           >
             {isLoading ? "Restableciendo…" : "Restablecer contraseña"}
           </button>
         </form>
 
-        <p className="mt-6 text-center text-sm" style={{ color: "var(--muted)" }}>
-          <Link
-            href="/forgot-password"
-            className="font-semibold"
-            style={{ color: "var(--primary)" }}
-          >
+        <p className="mt-6 text-center text-sm text-slate-600">
+          <Link href="/forgot-password" className="font-semibold text-teal-700 hover:text-teal-800">
             Solicitar un nuevo enlace
           </Link>
         </p>
@@ -172,9 +141,9 @@ export default function ResetPasswordPage() {
   return (
     <Suspense
       fallback={
-        <main className="page-shell flex min-h-screen items-center justify-center p-6">
-          <div className="card w-full max-w-sm p-8 text-center">
-            <p style={{ color: "var(--muted)" }}>Cargando…</p>
+        <main className="ops-bg flex min-h-screen items-center justify-center">
+          <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 text-center shadow-sm">
+            <p className="text-slate-600">Cargando…</p>
           </div>
         </main>
       }
