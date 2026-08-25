@@ -84,3 +84,51 @@
 ### Riesgos y deuda tecnica
 - Si el evaluador usa un contrato de categorias o nombre de campo de tarifa distinto, sera necesario ajustar constantes de dominio y seed.
 - El flujo de CI deberia separar dependencias de runtime y test (actualmente `httpx` queda en `requirements.txt` para asegurar reproducibilidad local de pruebas).
+
+## 2026-07-21 (nueva sesion)
+
+### Objetivo de esta ejecucion
+- Implementar Gestor de Incidencias Centralizado completo:
+	1. Extraer validacion a paquete compartido `packages/shared/validators/`
+	2. Crear backend CRUD de incidencias con TinyDB en `services/api/incidents/`
+	3. Crear seed script para datos historicos CSV
+	4. Crear componentes frontend en `uis/backoffice`: formulario, listado, resumen
+	5. Actualizar navegacion y validar lint/build
+
+### Cambios implementados
+
+- **Paquete compartido de validacion** (`packages/shared/validators/`):
+	- `incident_validator.py`: constantes (ALLOWED_CATEGORIES, ALLOWED_STATUSES, REQUIRED_FIELDS), funciones (normalize, normalize_key, parse_optional_score, validate_record), excepcion CsvFormatError.
+	- `__init__.py`: re-exporta todo lo publico.
+
+- **Backend de incidencias** (`services/api/incidents/`):
+	- `models.py`: modelos Pydantic IncidentCreate, IncidentStatusUpdate, IncidentResponse, IncidentPersistence, IncidentFilters. Mapa de transiciones de estado VALID_STATUS_TRANSITIONS.
+	- `repository.py`: IncidentRepository con TinyDB. Metodos: create, list (con filtros), get, update_status (valida transiciones), get_summary (agregaciones). Singleton.
+	- `routes/incidents.py`: 5 endpoints REST (`POST /`, `GET /`, `GET /summary`, `GET /{id}`, `PATCH /{id}/status`) con manejo de errores 400/404/500.
+	- `main.py`: router de incidencias registrado primero.
+	- `pyproject.toml`: includes actualizado.
+	- `analysis.py` y `__init__.py`: migrados a shared validators.
+
+- **Seed script** (`scripts/seed_incidents.py`):
+	- Lee CSV, transforma datos, usa validate_record. Idempotente via incident_ids. 70 insertados + 30 invalidos. Verificado.
+
+- **Frontend** (`uis/backoffice/`):
+	- `components/incident-form.tsx`: formulario con todos los campos, validacion cliente, feedback de errores por campo, spinner en submit.
+	- `components/incidents-list.tsx`: listado con filtros (status/origin/branch), estados loading/error/empty/vacio, tarjetas con badge de estado, acciones de transicion con optimistic update.
+	- `components/incidents-summary.tsx`: panel de metricas con graficos de barras por status/categoria/origen/sede + total general.
+	- `app/incidents/page.tsx`: pagina de listado.
+	- `app/incidents/new/page.tsx`: pagina de nuevo formulario.
+	- `app/incidents/summary/page.tsx`: pagina de resumen.
+	- `app/api/incidents/route.ts`, `[id]/route.ts`, `[id]/status/route.ts`, `summary/route.ts`: proxies al backend.
+	- `app/layout.tsx`: navegacion actualizada con enlaces a Incidencias, Nueva incidencia, Resumen.
+
+### Validaciones ejecutadas
+- tests/test_analysis.py: 2/2 tests pasan.
+- uis/backoffice: npm run lint (ok), npm run build (ok) — 15 rutas generadas correctamente.
+- seed: 70 incidencias insertadas, segunda ejecucion 0 insertadas (idempotente).
+
+### Proximos pasos (recomendados)
+- Conectar seed con el CSV real de TrackFlow cuando este disponible.
+- Implementar autenticacion/autorizacion en los endpoints de incidencias.
+- Agregar paginacion en el listado de incidencias.
+- Agregar tests para los nuevos endpoints de incidencias.

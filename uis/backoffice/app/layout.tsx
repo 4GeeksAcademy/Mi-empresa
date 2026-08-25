@@ -31,6 +31,24 @@ export default function RootLayout({
                 Inicio
               </Link>
               <Link
+                href="/incidents"
+                className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Incidencias
+              </Link>
+              <Link
+                href="/incidents/new"
+                className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Nueva incidencia
+              </Link>
+              <Link
+                href="/incidents/summary"
+                className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Resumen
+              </Link>
+              <Link
                 href="/incidents-analysis"
                 className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
               >

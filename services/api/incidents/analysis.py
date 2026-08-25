@@ -2,35 +2,31 @@ from __future__ import annotations
 
 import csv
 import io
+import sys
 from collections import Counter
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
-REQUIRED_FIELDS = ("incident_id", "category", "status")
-CATEGORY_FIELD = "category"
-STATUS_FIELD = "status"
-SATISFACTION_FIELD = "satisfaction_score"
+# Asegurar que el repo root esta en sys.path para poder importar packages/shared
+_REPO_ROOT = Path(__file__).resolve().parents[3]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
 
-ALLOWED_CATEGORIES = {
-    "logistica",
-    "tracking",
-    "devolucion",
-    "facturacion",
-    "soporte",
-}
-
-ALLOWED_STATUSES = {
-    "abierto",
-    "en_progreso",
-    "cerrado",
-    "descartado",
-}
-
-CLOSED_STATUS = "cerrado"
-
-
-class CsvFormatError(ValueError):
-    pass
+from packages.shared.validators import (  # noqa: E402
+    ALLOWED_CATEGORIES,
+    ALLOWED_STATUSES,
+    CATEGORY_FIELD,
+    CLOSED_STATUS,
+    REQUIRED_FIELDS,
+    SATISFACTION_FIELD,
+    STATUS_FIELD,
+    CsvFormatError,
+    normalize,
+    normalize_key,
+    parse_optional_score,
+    validate_record,
+)
 
 
 @dataclass
@@ -85,57 +81,15 @@ class AnalysisResult:
         return rows
 
 
-def _normalize(value: str | None) -> str:
-    return (value or "").strip()
-
-
-def _normalize_key(key: str | None) -> str:
-    return _normalize(key).lower()
-
-
-def _parse_optional_score(raw: str | None) -> float | None:
-    value = _normalize(raw)
-    if value == "":
-        return None
-
-    try:
-        score = float(value)
-    except ValueError:
-        return None
-
-    if score < 0 or score > 5:
-        return None
-
-    return score
-
-
-def _validate_record(record: dict[str, str]) -> list[str]:
-    errors: list[str] = []
-
-    missing_fields = [field for field in REQUIRED_FIELDS if _normalize(record.get(field)) == ""]
-    if missing_fields:
-        errors.append("missing_required_field")
-
-    category = _normalize(record.get(CATEGORY_FIELD)).lower()
-    if category and category not in ALLOWED_CATEGORIES:
-        errors.append("invalid_category")
-
-    status = _normalize(record.get(STATUS_FIELD)).lower()
-    if status and status not in ALLOWED_STATUSES:
-        errors.append("invalid_status")
-
-    return errors
-
-
 def analyze_incidents_csv(csv_text: str) -> AnalysisResult:
-    if _normalize(csv_text) == "":
+    if normalize(csv_text) == "":
         raise CsvFormatError("El fichero CSV esta vacio.")
 
     reader = csv.DictReader(io.StringIO(csv_text))
     if reader.fieldnames is None:
         raise CsvFormatError("No se pudo leer la cabecera del CSV.")
 
-    normalized_fieldnames = [_normalize_key(name) for name in reader.fieldnames]
+    normalized_fieldnames = [normalize_key(name) for name in reader.fieldnames]
     if any(name == "" for name in normalized_fieldnames):
         raise CsvFormatError("La cabecera del CSV contiene columnas vacias.")
 
@@ -148,7 +102,7 @@ def analyze_incidents_csv(csv_text: str) -> AnalysisResult:
     normalized_rows: list[dict[str, str]] = []
     for row in reader:
         normalized_row = {
-            _normalize_key(key): _normalize(value)
+            normalize_key(key): normalize(value)
             for key, value in row.items()
             if key is not None
         }
@@ -165,19 +119,19 @@ def analyze_incidents_csv(csv_text: str) -> AnalysisResult:
     closed_scores: list[float] = []
 
     for row in normalized_rows:
-        errors = _validate_record(row)
+        errors = validate_record(row)
         if errors:
             invalid_counter.update(errors)
             continue
 
-        category = _normalize(row.get(CATEGORY_FIELD)).lower()
-        status = _normalize(row.get(STATUS_FIELD)).lower()
+        category = normalize(row.get(CATEGORY_FIELD)).lower()
+        status = normalize(row.get(STATUS_FIELD)).lower()
 
         category_counter[category] += 1
         status_counter[status] += 1
 
         if status == CLOSED_STATUS:
-            score = _parse_optional_score(row.get(SATISFACTION_FIELD))
+            score = parse_optional_score(row.get(SATISFACTION_FIELD))
             if score is not None:
                 closed_scores.append(score)
 
@@ -186,7 +140,7 @@ def analyze_incidents_csv(csv_text: str) -> AnalysisResult:
         [
             row
             for row in normalized_rows
-            if _validate_record(row)
+            if validate_record(row)
         ]
     )
 
