@@ -36,6 +36,12 @@ export default function RootLayout({
               >
                 Analizador de incidencias
               </Link>
+              <Link
+                href="/suppliers"
+                className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+              >
+                Directorio de proveedores
+              </Link>
             </nav>
           </header>
           {children}

@@ -22,6 +22,12 @@ export default function BackofficeHomePage() {
           >
             Ir al analizador de incidencias
           </Link>
+          <Link
+            href="/suppliers"
+            className="ml-3 mt-4 inline-flex rounded-lg border border-teal-700 px-4 py-2 text-sm font-semibold text-teal-700 transition hover:bg-teal-50"
+          >
+            Gestionar proveedores
+          </Link>
         </header>
 
         <section className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-4">

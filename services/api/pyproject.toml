@@ -1,0 +1,30 @@
+[build-system]
+requires = ["setuptools>=68.0"]
+build-backend = "setuptools.build_meta"
+
+[tool.uv]
+package = true
+
+[tool.setuptools]
+py-modules = ["seed", "database", "models"]
+
+[tool.setuptools.packages.find]
+include = ["seed*", "database*", "models*"]
+
+[project]
+name = "trackflow-api"
+version = "0.1.0"
+requires-python = ">=3.12"
+dependencies = [
+    "fastapi>=0.117",
+    "uvicorn>=0.36",
+    "python-multipart>=0.0.20",
+    "tinydb>=4.8",
+    "httpx>=0.28",
+]
+
+[project.optional-dependencies]
+test = ["pytest>=8.4"]
+
+[project.scripts]
+seed = "seed:run_seed"
