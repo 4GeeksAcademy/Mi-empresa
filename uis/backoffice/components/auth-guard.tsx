@@ -2,7 +2,7 @@
 
 import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
-import { getToken } from "@/lib/auth";
+import { verifyToken } from "@/lib/auth";
 
 // Rutas públicas que no requieren autenticación
 const PUBLIC_ROUTES = ["/login", "/register"];
@@ -16,8 +16,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
       return;
     }
 
-    const token = getToken();
-    if (!token) {
+    if (!verifyToken()) {
       router.replace("/login");
     }
   }, [pathname, router]);
@@ -28,8 +27,7 @@ export function AuthGuard({ children }: { children: React.ReactNode }) {
   }
 
   // Verificar token síncronamente para evitar flash
-  const token = getToken();
-  if (!token) {
+  if (!verifyToken()) {
     return null;
   }
 

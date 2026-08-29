@@ -3,32 +3,28 @@
 import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken } from "@/lib/auth";
+import { verifyToken } from "@/lib/auth";
 
 const PUBLIC_ROUTES = ["/login", "/register"];
 
 export function Shell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const router = useRouter();
-  const [checked, setChecked] = useState(false);
-
   const isPublic = PUBLIC_ROUTES.includes(pathname);
 
+  // verifyToken es síncrono: lo evaluamos directamente si no es ruta pública
+  const [checked] = useState(() => {
+    if (typeof window === "undefined") return false;
+    return isPublic || verifyToken();
+  });
+
   useEffect(() => {
-    if (isPublic) {
-      setChecked(true);
-      return;
-    }
-
-    const token = getToken();
-    if (!token) {
+    if (!isPublic && !checked) {
       router.replace("/login");
-    } else {
-      setChecked(true);
     }
-  }, [pathname, router, isPublic]);
+  }, [pathname, router, isPublic, checked]);
 
-  if (!checked && !isPublic) {
+  if (!isPublic && !checked) {
     return null;
   }
 
