@@ -2,10 +2,18 @@ import { NextResponse } from "next/server";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://127.0.0.1:8000";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
+    const authHeader = request.headers.get("authorization");
+
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const response = await fetch(`${BACKEND_BASE_URL}/api/incidents/results/export`, {
       method: "GET",
+      headers,
     });
 
     const contentType = response.headers.get("content-type") ?? "text/csv; charset=utf-8";

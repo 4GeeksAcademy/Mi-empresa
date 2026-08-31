@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-REQUIRED_FIELDS = ("incident_id", "category", "status")
+REQUIRED_FIELDS = ("category", "status")
 CATEGORY_FIELD = "category"
 STATUS_FIELD = "status"
 SATISFACTION_FIELD = "satisfaction_score"
