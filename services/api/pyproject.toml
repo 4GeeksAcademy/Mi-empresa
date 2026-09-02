@@ -9,7 +9,7 @@ package = true
 py-modules = ["seed", "database", "models", "auth_models", "auth_db", "auth"]
 
 [tool.setuptools.packages.find]
-include = ["seed*", "database*", "models*", "auth_models*", "auth_db*", "auth*", "routes*"]
+include = ["seed*", "database*", "models*", "auth_models*", "auth_db*", "auth*", "routes*", "incidents*"]
 
 [project]
 name = "trackflow-api"

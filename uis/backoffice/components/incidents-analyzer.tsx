@@ -21,6 +21,7 @@ export function IncidentsAnalyzer() {
   const [file, setFile] = useState<File | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
+  const [isDownloading, setIsDownloading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<AnalyzeResponse | null>(null);
 
@@ -42,6 +43,41 @@ export function IncidentsAnalyzer() {
     setError(null);
   }
 
+  async function onDownload() {
+    setIsDownloading(true);
+    try {
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
+      const response = await fetch("/api/incidents/results/export", { headers });
+      if (!response.ok) {
+        const errorBody = (await response.json()) as { detail?: string };
+        throw new Error(errorBody.detail ?? "No se pudo descargar el fichero.");
+      }
+
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement("a");
+      anchor.href = url;
+      anchor.download = "results.csv";
+      document.body.appendChild(anchor);
+      anchor.click();
+      document.body.removeChild(anchor);
+      URL.revokeObjectURL(url);
+    } catch (caughtError) {
+      if (caughtError instanceof Error) {
+        setError(caughtError.message);
+      } else {
+        setError("Fallo inesperado durante la descarga.");
+      }
+    } finally {
+      setIsDownloading(false);
+    }
+  }
+
   async function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     setError(null);
@@ -56,8 +92,15 @@ export function IncidentsAnalyzer() {
       const formData = new FormData();
       formData.append("file", file);
 
+      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      const headers: Record<string, string> = {};
+      if (token) {
+        headers["Authorization"] = `Bearer ${token}`;
+      }
+
       const response = await fetch("/api/incidents/analyze", {
         method: "POST",
+        headers,
         body: formData,
       });
 
@@ -129,14 +172,14 @@ export function IncidentsAnalyzer() {
               {isLoading ? "Analizando..." : "Analizar fichero"}
             </button>
 
-            <a
-              href="/api/incidents/results/export"
-              target="_blank"
-              rel="noreferrer"
-              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400"
+            <button
+              type="button"
+              onClick={onDownload}
+              disabled={isDownloading}
+              className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-semibold text-slate-700 transition hover:border-slate-400 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Descargar results.csv
-            </a>
+              {isDownloading ? "Descargando..." : "Descargar results.csv"}
+            </button>
           </div>
 
           {error && <p className="rounded-lg bg-rose-50 px-3 py-2 text-sm font-semibold text-rose-800">{error}</p>}

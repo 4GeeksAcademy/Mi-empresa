@@ -13,8 +13,16 @@ function buildHeaders(request: Request): Record<string, string> {
 
 export async function GET(request: Request) {
   try {
+    const authHeader = request.headers.get("authorization");
+
+    const headers: Record<string, string> = {};
+    if (authHeader) {
+      headers["Authorization"] = authHeader;
+    }
+
     const response = await fetch(`${BACKEND_BASE_URL}/api/incidents/results/export`, {
       method: "GET",
+      headers,
       headers: buildHeaders(request),
     });
 
