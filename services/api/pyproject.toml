@@ -22,7 +22,7 @@ dependencies = [
     "tinydb>=4.8",
     "httpx>=0.28",
     "python-jose[cryptography]>=3.3",
-    "libpass[bcrypt]>=1.0",
+    "passlib[bcrypt]>=1.7",
     "python-dotenv>=1.1",
 ]
 

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
-import Link from "next/link";
 import "./globals.css";
+import { Shell } from "@/components/shell";
 
 const plex = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -64,6 +64,7 @@ export default function RootLayout({
           </header>
           {children}
         </div>
+        <Shell>{children}</Shell>
       </body>
     </html>
   );

@@ -6,6 +6,15 @@ interface RouteParams {
   params: Promise<{ id: string }>;
 }
 
+function buildHeaders(request: Request): Record<string, string> {
+  const headers: Record<string, string> = {};
+  const auth = request.headers.get("authorization");
+  if (auth) {
+    headers["authorization"] = auth;
+  }
+  return headers;
+}
+
 export async function PATCH(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -15,6 +24,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
       method: "PATCH",
       headers: {
         "content-type": "application/json",
+        ...buildHeaders(request),
       },
       body: payload,
     });
