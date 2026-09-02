@@ -84,3 +84,47 @@
 ### Riesgos y deuda tecnica
 - Si el evaluador usa un contrato de categorias o nombre de campo de tarifa distinto, sera necesario ajustar constantes de dominio y seed.
 - El flujo de CI deberia separar dependencias de runtime y test (actualmente `httpx` queda en `requirements.txt` para asegurar reproducibilidad local de pruebas).
+
+## 2026-08-29
+
+### Objetivo de esta ejecucion
+- Conectar flujos de autenticación en el frontend (backoffice + talent-pipeline-tracker).
+- Corregir errores de build y lint para que ambos proyectos compilen limpio.
+
+### Cambios implementados
+- **Rama:** `feature/auth-frontend` — PR #6 "Conectando el Candado: Flujos de Autenticación en el Frontend"
+- **uis/backoffice:**
+  - Páginas de login, registro y perfil.
+  - Componentes: `auth-guard`, `protected-layout`, `shell` (con verificación de token).
+  - API routes proxy: `auth/login`, `auth/me`, `auth/register`, `profiles/me`.
+  - Layout modificado con protección de rutas.
+- **uis/talent-pipeline-tracker:**
+  - Mismo patrón: login, register, account/profile, shell, lib/auth, services/api actualizado.
+- **services/api:** Dependencias actualizadas para auth.
+
+### Correcciones realizadas en esta sesión
+1. **TypeScript error** en `app/account/profile/page.tsx` (ambos proyectos): `getToken()` retorna `string | null`, pero `getMe(token)` espera `string`. Se añadió guardia temprana.
+2. **Lint error** en `components/shell.tsx` (ambos): regla React 19 `set-state-in-effect`. Se reemplazó `useState` + `useEffect` por inicializador lazy en `useState`.
+3. **Lint error** en `app/account/profile/page.tsx` (ambos): misma regla. Se reemplazó `useCallback` + `useEffect` por lógica async inline en el efecto con flag `cancelled`.
+
+### Validaciones ejecutadas
+- `npm run lint` en `uis/backoffice` -> ✅ OK.
+- `npm run build` en `uis/backoffice` -> ✅ OK.
+- `npm run lint` en `uis/talent-pipeline-tracker` -> ✅ OK.
+- `npm run build` en `uis/talent-pipeline-tracker` -> ✅ OK.
+
+### Decision tecnica relevante
+- React 19 tiene una regla de lint (`react-hooks/set-state-in-effect`) que prohibe llamar `setState` sincrónicamente en efectos. Se optó por:
+  - **Shell:** inicializador lazy en `useState(() => verifyToken())`
+  - **Profile:** lógica async inline en el `useEffect` con flag de cancelación
+
+### Estado del PR #6
+- Sin revisiones pendientes ni CI configurado (0 status checks).
+- Sin conflictos de merge aparentes.
+- Pendiente: añadir CI checks y posiblemente revisión.
+
+### Riesgos y deuda técnica
+- No hay flujo de logout visible (el botón "Cerrar sesión" en profile usa `logout()` pero no se verificó su implementación).
+- No hay refresh token — solo JWT simple con expiración.
+- No hay tests frontend de auth.
+- React 19 lint rule puede causar fricción en futuros desarrollos con efectos.
