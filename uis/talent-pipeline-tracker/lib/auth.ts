@@ -46,6 +46,40 @@ export function removeToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY);
 }
 
+/**
+ * Decodifica el payload de un JWT y verifica si está expirado.
+ * No requiere librerías externas, usa atob() del browser.
+ */
+export function isTokenExpired(token: string): boolean {
+  try {
+    const parts = token.split(".");
+    if (parts.length !== 3) return true; // No es un JWT válido
+
+    const payload = JSON.parse(atob(parts[1]));
+    if (!payload || typeof payload.exp !== "number") return true;
+
+    return Date.now() / 1000 >= payload.exp;
+  } catch {
+    return true; // Si no se puede decodificar, considerar expirado
+  }
+}
+
+/**
+ * Verifica si hay un token válido (existente y no expirado).
+ * Si el token está expirado, lo limpia de localStorage.
+ */
+export function verifyToken(): boolean {
+  const token = getToken();
+  if (!token) return false;
+
+  if (isTokenExpired(token)) {
+    removeToken();
+    return false;
+  }
+
+  return true;
+}
+
 // ─── Auth API calls ───────────────────────────────────────────────────
 
 export async function login(input: LoginInput): Promise<string> {

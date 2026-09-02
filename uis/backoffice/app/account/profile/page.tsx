@@ -1,8 +1,8 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { getToken, getMe, updateProfile, logout, type AuthUser } from "@/lib/auth";
+import { verifyToken, getToken, getMe, updateProfile, logout, type AuthUser } from "@/lib/auth";
 
 export default function ProfilePage() {
   const router = useRouter();
@@ -16,33 +16,44 @@ export default function ProfilePage() {
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<string | null>(null);
 
-  const loadProfile = useCallback(async () => {
+  useEffect(() => {
+    let cancelled = false;
+
+    if (!verifyToken()) {
+      router.push("/login");
+      return;
+    }
+
     const token = getToken();
     if (!token) {
       router.push("/login");
       return;
     }
 
-    try {
-      const userData = await getMe(token);
-      setUser(userData);
-      setName(userData.profile?.name ?? "");
-      setPhone(userData.profile?.phone ?? "");
-      setAddress(userData.profile?.address ?? "");
-    } catch {
-      // Token inválido o expirado → limpiar y redirigir al login
-      localStorage.removeItem("auth_token");
-      router.push("/login");
-    } finally {
-      setLoading(false);
-    }
+    getMe(token)
+      .then((userData) => {
+        if (!cancelled) {
+          setName(userData.profile?.name ?? "");
+          setPhone(userData.profile?.phone ?? "");
+          setAddress(userData.profile?.address ?? "");
+          setUser(userData);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setError("No se pudo cargar la información del perfil.");
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
   }, [router]);
 
-  useEffect(() => {
-    void loadProfile();
-  }, [loadProfile]);
-
   async function handleSave() {
+    if (!verifyToken()) return;
+
     const token = getToken();
     if (!token) {
       router.push("/login");
