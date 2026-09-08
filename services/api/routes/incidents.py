@@ -48,7 +48,13 @@ def list_incidents(
         ) from exc
 
     repo = get_incidents_repository()
-    return repo.list(filters)
+    try:
+        return repo.list(filters)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al listar las incidencias. Intentalo de nuevo mas tarde.",
+        ) from exc
 
 
 @router.get("/summary")
@@ -68,7 +74,13 @@ def get_summary() -> dict:
 def get_incident(incident_id: int) -> IncidentResponse:
     """Devuelve el detalle de una incidencia por ID."""
     repo = get_incidents_repository()
-    incident = repo.get(incident_id)
+    try:
+        incident = repo.get(incident_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al obtener la incidencia. Intentalo de nuevo mas tarde.",
+        ) from exc
     if incident is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

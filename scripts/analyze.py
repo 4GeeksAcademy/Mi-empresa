@@ -141,12 +141,16 @@ def main() -> int:
         print(f"ERROR: el archivo no existe: {csv_path}")
         return 1
 
-    csv_text = csv_path.read_text(encoding="utf-8-sig")
+    try:
+        csv_text = csv_path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeDecodeError) as exc:
+        print(f"ERROR: No se pudo leer el archivo CSV ({csv_path}): {exc}")
+        return 1
 
     try:
         analysis = analyze_incidents_csv(csv_text)
-    except CsvFormatError as exc:
-        print(f"ERROR: {exc}")
+    except (CsvFormatError, csv.Error, ValueError) as exc:
+        print(f"ERROR al analizar el CSV: {exc}")
         return 1
 
     summary = analysis.to_json()

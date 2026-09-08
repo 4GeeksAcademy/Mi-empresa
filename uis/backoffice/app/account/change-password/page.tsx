@@ -1,12 +1,16 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
-import { getToken, changePassword, logout } from "@/lib/auth";
+import { getToken, changePassword, logout, verifyToken } from "@/lib/auth";
 
 export default function ChangePasswordPage() {
   const router = useRouter();
+  const [token] = useState<string | null>(() => {
+    if (typeof window === "undefined") return null;
+    return getToken();
+  });
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [confirmPassword, setConfirmPassword] = useState("");
@@ -14,12 +18,11 @@ export default function ChangePasswordPage() {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
 
-  // Verificar autenticación al cargar
-  const token = getToken();
-  if (!token) {
-    router.push("/login");
-    return null;
-  }
+  useEffect(() => {
+    if (!verifyToken()) {
+      router.push("/login");
+    }
+  }, [router]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

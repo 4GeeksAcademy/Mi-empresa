@@ -23,7 +23,13 @@ def create_supplier(
     current_user: dict = Depends(get_current_user),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
-    return repo.create(payload)
+    try:
+        return repo.create(payload)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al registrar el proveedor.",
+        ) from exc
 
 
 @router.get("", response_model=list[SupplierResponse])
@@ -38,13 +44,25 @@ def list_suppliers(
         categoria=categoria or category,
     )
     repo = get_suppliers_repository()
-    return repo.list(filters)
+    try:
+        return repo.list(filters)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al listar proveedores.",
+        ) from exc
 
 
 @router.get("/{supplier_id}", response_model=SupplierResponse)
 def get_supplier(supplier_id: int) -> SupplierResponse:
     repo = get_suppliers_repository()
-    supplier = repo.get(supplier_id)
+    try:
+        supplier = repo.get(supplier_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al obtener el proveedor.",
+        ) from exc
     if supplier is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     return supplier
@@ -57,7 +75,13 @@ def update_supplier_rate(
     current_user: dict = Depends(get_current_user),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
-    updated = repo.update_rate(supplier_id, payload.tarifa_por_kg)
+    try:
+        updated = repo.update_rate(supplier_id, payload.tarifa_por_kg)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al actualizar la tarifa.",
+        ) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     return updated
@@ -70,7 +94,13 @@ def update_supplier_status(
     current_user: dict = Depends(get_current_user),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
-    updated = repo.update_status(supplier_id, payload.status)
+    try:
+        updated = repo.update_status(supplier_id, payload.status)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al actualizar el estado.",
+        ) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     return updated
@@ -82,7 +112,13 @@ def delete_supplier(
     current_user: dict = Depends(get_current_user),
 ) -> dict[str, str]:
     repo = get_suppliers_repository()
-    deleted = repo.delete(supplier_id)
+    try:
+        deleted = repo.delete(supplier_id)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Error interno al eliminar el proveedor.",
+        ) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     return {"detail": "Proveedor eliminado."}

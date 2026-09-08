@@ -56,6 +56,8 @@ function parseErrorDetail(errorBody: unknown): string {
 export function SuppliersDirectory() {
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
+  const [isCreating, setIsCreating] = useState(false);
+  const [updatingSupplierId, setUpdatingSupplierId] = useState<number | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
 
@@ -147,6 +149,7 @@ export function SuppliersDirectory() {
       status: newStatus,
     };
 
+    setIsCreating(true);
     try {
       const response = await fetch("/api/suppliers", {
         method: "POST",
@@ -174,6 +177,8 @@ export function SuppliersDirectory() {
       } else {
         setError("No se pudo crear el proveedor.");
       }
+    } finally {
+      setIsCreating(false);
     }
   }
 
@@ -187,6 +192,7 @@ export function SuppliersDirectory() {
       return;
     }
 
+    setUpdatingSupplierId(id);
     try {
       const response = await fetch(`/api/suppliers/${id}/rate`, {
         method: "PATCH",
@@ -209,6 +215,8 @@ export function SuppliersDirectory() {
       } else {
         setError("No se pudo actualizar la tarifa.");
       }
+    } finally {
+      setUpdatingSupplierId(null);
     }
   }
 
@@ -218,6 +226,7 @@ export function SuppliersDirectory() {
 
     const nextStatus: SupplierStatus = supplier.status === "activo" ? "suspendido" : "activo";
 
+    setUpdatingSupplierId(supplier.id);
     try {
       const response = await fetch(`/api/suppliers/${supplier.id}/status`, {
         method: "PATCH",
@@ -240,6 +249,8 @@ export function SuppliersDirectory() {
       } else {
         setError("No se pudo actualizar el estado.");
       }
+    } finally {
+      setUpdatingSupplierId(null);
     }
   }
 
@@ -355,9 +366,10 @@ export function SuppliersDirectory() {
           <div className="md:col-span-2">
             <button
               type="submit"
-              className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800"
+              disabled={isCreating}
+              className="rounded-lg bg-teal-700 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-800 disabled:opacity-50"
             >
-              Crear proveedor
+              {isCreating ? "Guardando..." : "Crear proveedor"}
             </button>
           </div>
         </form>
@@ -390,30 +402,32 @@ export function SuppliersDirectory() {
               <tbody>
                 {suppliers.map((supplier) => (
                   <tr key={supplier.id} className="border-b border-slate-100 align-top">
-                    <td className="py-3 pr-4 font-semibold text-slate-900">{supplier.nombre}</td>
-                    <td className="py-3 pr-4 text-slate-700">{supplier.pais}</td>
-                    <td className="py-3 pr-4 text-slate-700">{supplier.categorias_producto.join(", ")}</td>
+                    <td className="py-3 pr-4 font-semibold text-slate-900">{supplier.nombre ?? "Sin nombre"}</td>
+                    <td className="py-3 pr-4 text-slate-700">{supplier.pais ?? "-"}</td>
+                    <td className="py-3 pr-4 text-slate-700">{supplier.categorias_producto?.join(", ") ?? "-"}</td>
                     <td className="py-3 pr-4">
                       <div className="flex items-center gap-2">
                         <input
                           type="number"
                           step="0.01"
                           min="0.01"
-                          value={draftRates[supplier.id] ?? supplier.tarifa_por_kg.toString()}
+                          disabled={updatingSupplierId === supplier.id}
+                          value={draftRates[supplier.id] ?? supplier.tarifa_por_kg?.toString() ?? "0"}
                           onChange={(event) =>
                             setDraftRates((current) => ({
                               ...current,
                               [supplier.id]: event.target.value,
                             }))
                           }
-                          className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm"
+                          className="w-24 rounded-md border border-slate-300 px-2 py-1 text-sm disabled:opacity-50"
                         />
                         <button
                           type="button"
+                          disabled={updatingSupplierId === supplier.id}
                           onClick={() => void handleUpdateRate(supplier.id)}
-                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-slate-400"
+                          className="rounded-md border border-slate-300 px-2 py-1 text-xs font-semibold text-slate-700 hover:border-slate-400 disabled:opacity-50"
                         >
-                          Guardar
+                          {updatingSupplierId === supplier.id ? "Guardando..." : "Guardar"}
                         </button>
                       </div>
                     </td>
@@ -425,17 +439,22 @@ export function SuppliersDirectory() {
                             : "bg-rose-100 text-rose-800"
                         }`}
                       >
-                        {supplier.status}
+                        {supplier.status ?? "desconocido"}
                       </span>
                     </td>
-                    <td className="py-3 pr-4 text-slate-600">{new Date(supplier.updated_at).toLocaleString("es-ES")}</td>
+                    <td className="py-3 pr-4 text-slate-600">{supplier.updated_at ? new Date(supplier.updated_at).toLocaleString("es-ES") : "-"}</td>
                     <td className="py-3">
                       <button
                         type="button"
+                        disabled={updatingSupplierId === supplier.id}
                         onClick={() => void handleToggleStatus(supplier)}
-                        className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700"
+                        className="rounded-md bg-slate-900 px-3 py-1.5 text-xs font-semibold text-white hover:bg-slate-700 disabled:opacity-50"
                       >
-                        {supplier.status === "activo" ? "Suspender" : "Activar"}
+                        {updatingSupplierId === supplier.id
+                          ? "Procesando..."
+                          : supplier.status === "activo"
+                          ? "Suspender"
+                          : "Activar"}
                       </button>
                     </td>
                   </tr>

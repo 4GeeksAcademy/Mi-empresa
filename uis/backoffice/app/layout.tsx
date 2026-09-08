@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Link from "next/link";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/shell";
