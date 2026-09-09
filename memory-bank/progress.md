@@ -182,3 +182,53 @@
   - `python3 scripts/analyze.py archivo_inexistente.csv`: Captura correctamente el error de archivo no encontrado y retorna codigo 1 sin lanzar stack trace.
   - `python3 scripts/analyze.py incidents-COMPANY.csv`: Analiza 100 registros (70 validos, 30 invalidos) y genera reporte estructurado.
   - `python3 scripts/seed_incidents.py`: Carga inicial de 70 registros validos y 30 descartados; segunda ejecucion valida la idempotencia (0 insertados, 70 omitidos).
+
+## 2026-09-09 (AUTH-088 - Pruebas unitarias de autenticacion)
+
+### Objetivo de esta ejecucion
+- Crear pruebas unitarias de la logica de autenticacion sin depender de la serializacion HTTP ni de internals de FastAPI.
+
+### Cambios implementados
+- Creado `TESTING.md` con el plan, ejecucion, riesgos y escenarios de autenticacion.
+- Incorporado aislamiento compartido de TinyDB temporal por prueba en `services/api/tests/conftest.py`.
+- Anadidas o convertidas suites unitarias directas para registro y usuarios, login, JWT/autorizacion, recuperacion y cambio de contrasena, perfiles y `/auth/me`.
+- Declarado `pytest-cov>=7.1` en el grupo de dependencias de desarrollo de `services/api/pyproject.toml`.
+
+### Validaciones ejecutadas
+- `python -m pytest tests/test_register.py tests/test_login.py tests/test_token.py tests/test_auth_password.py tests/test_profile.py -q` -> 27 passed.
+- `SECRET_KEY=test-secret-key-for-auth-088 python -m pytest -q` -> 37 passed.
+- Cobertura enfocada inicial: `auth.py` 96%, `routes/auth.py` 95%, `routes/profiles.py` 91%, `routes/users.py` 76%, total 88%.
+
+### Decision tecnica relevante
+- `uv` no esta disponible en el contenedor. Se instalaron paquetes con `python -m pip install -r requirements.txt pytest-cov` y se uso `python -m pytest` como equivalente local. En un entorno con uv, `uv add --dev pytest-cov` y `uv run pytest` son los comandos documentados.
+
+### Riesgos y deuda tecnica
+- La libreria externa `python-jose` emite avisos deprecados por `datetime.utcnow()` durante pruebas de JWT; no procede del codigo TrackFlow.
+
+### Cierre estricto de evaluacion
+- Instalado `uv 0.12.12` en el entorno de desarrollo y verificado `uv run pytest -q` sin variables de entorno: 40 passed.
+- Corregida la deriva entre `requirements.txt` y `pyproject.toml`: ambos fijan `bcrypt==4.1.2` por compatibilidad con `passlib`.
+- El fixture de pruebas provee una clave JWT efimera, de modo que las pruebas no requieren un secreto local.
+- Anadida configuracion Jest ESM (`src/jest.config.cjs`) y pruebas de las cuatro utilidades TypeScript. `npm test -- --coverage`: 6 passed, 75.25% de statements y 100% de funciones.
+
+## 2026-09-09 (API-042 y FE-019 - Cobertura extra)
+
+### Objetivo de esta ejecucion
+- Ampliar pruebas unitarias del backoffice para proveedores e incidencias y cubrir helpers de autenticacion del frontend backoffice.
+
+### Cambios implementados
+- Anadidas pruebas unitarias directas en `services/api/tests/test_backoffice_suppliers.py` y `services/api/tests/test_backoffice_incidents.py`, con dobles de repositorio para resultados validos, recursos ausentes, filtros, fallos de almacenamiento y transiciones invalidas.
+- Anadidos Jest, `ts-jest`, jsdom, configuracion y script `test` en `uis/backoffice`.
+- Anadidas pruebas de `isTokenExpired`, `verifyToken` y `login` en `uis/backoffice/tests/auth.test.ts`.
+
+### Validaciones ejecutadas
+- API-042 enfocada: 7 passed; `routes/suppliers.py` 77%, `routes/incidents.py` 66%, total 72% (objetivo >= 60%).
+- FE-019: `npm test -- --coverage` -> 3 passed; 48.1% statements y 30% functions en `lib/auth.ts`.
+- `npm run lint` y `npx tsc --noEmit` en `uis/backoffice` -> OK.
+
+### Decision tecnica relevante
+- Las rutas se prueban por llamada directa con sus parametros inyectados resueltos; los defaults `Query(...)` de FastAPI no se usan como valores de negocio en las pruebas.
+- jsdom no aporta `fetch` ni `Response`; FE-019 los sustituye por dobles locales para probar solo las decisiones de los helpers.
+
+### Riesgos y deuda tecnica
+- La cobertura de `lib/auth.ts` no pretende cubrir todas las llamadas API; FE-019 se limita a los tres helpers solicitados y sus casos de exito/fallo.
