@@ -15,11 +15,21 @@ from auth_models import UserRole
 
 load_dotenv()
 
-SECRET_KEY = os.getenv("SECRET_KEY", "")
-if not SECRET_KEY:
-    raise RuntimeError("SECRET_KEY no configurada. Define SECRET_KEY en el archivo .env")
-
+SECRET_KEY = os.getenv("SECRET_KEY")
 ACCESS_TOKEN_EXPIRE_MINUTES = int(os.getenv("ACCESS_TOKEN_EXPIRE_MINUTES", "30"))
+
+
+def get_secret_key() -> str:
+    """Devuelve la clave JWT solo cuando la autenticación la necesite.
+
+    Esto evita que la importación del módulo falle si la config no está presente,
+    y en su lugar produce un error claro al intentar autenticar.
+    """
+    if not SECRET_KEY:
+        raise RuntimeError(
+            "SECRET_KEY no configurada. Define SECRET_KEY en el archivo .env antes de iniciar la API."
+        )
+    return SECRET_KEY
 
 ALGORITHM = "HS256"
 
@@ -35,12 +45,13 @@ def verify_password(plain_password: str, hashed_password: str) -> bool:
 
 
 def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = None) -> str:
+    secret_key = get_secret_key()
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + (
         expires_delta if expires_delta else timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
     )
     to_encode.update({"exp": expire})
-    return jwt.encode(to_encode, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
 
 
 async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
@@ -55,7 +66,7 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
         headers={"WWW-Authenticate": "Bearer"},
     )
     try:
-        payload = jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        payload = jwt.decode(token, get_secret_key(), algorithms=[ALGORITHM])
         sub: str | None = payload.get("sub")
         if sub is None:
             raise credentials_exception

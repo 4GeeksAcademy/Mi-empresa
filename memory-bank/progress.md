@@ -128,3 +128,57 @@
 - No hay refresh token — solo JWT simple con expiración.
 - No hay tests frontend de auth.
 - React 19 lint rule puede causar fricción en futuros desarrollos con efectos.
+
+## 2026-09-08
+
+### Objetivo de esta ejecucion
+- Corregir errores reales de runtime y de validacion que bloquean la ejecucion del backend y la UI.
+
+### Cambios implementados
+- Ajuste en `services/api/auth.py`: la comprobacion de `SECRET_KEY` se hace de forma lazy para no romper la importacion del modulo y devolver un error claro al intentar autenticar.
+- Ajuste en `requirements.txt`: fijado `bcrypt==4.1.2` para evitar incompatibilidad con `passlib` en el entorno actual.
+- Correccion en `uis/backoffice/app/layout.tsx`: import faltante de `Link` desde `next/link` para limpiar errores de lint.
+
+### Validaciones ejecutadas
+- Backend: `SECRET_KEY=test-secret-key-for-dev pytest -q --maxfail=1` -> 21 passed.
+- Frontend: `cd uis/backoffice && npm run lint -- --quiet` -> sin errores tras la correccion.
+- Frontend: `cd uis/backoffice && npm run build` -> pendiente de validacion si se requiere build final del proyecto.
+
+### Decision tecnica relevante
+- No se añadieron funcionalidades nuevas; solo se corrigio la causa raiz de los fallos de configuracion e importacion, que eran bloqueantes para la ejecucion real del proyecto.
+
+## 2026-09-08 (Auditoría y Corrección Completa de Gestión de Errores)
+
+### Objetivo de esta ejecucion
+- Realizar auditoria exhaustiva de gestion de errores en frontend, backend y scripts.
+- Corregir todas las brechas detectadas sin añadir funcionalidades ni refactors fuera de alcance.
+- Dejar evidencia real y verificable de la validacion ejecutada.
+
+### Cambios implementados
+1. **Backend (`services/api`)**:
+   - `services/api/main.py`: Añadido `@app.exception_handler(Exception)` global para capturar errores 500 no previstos, loguear la traza internamente y devolver un JSON seguro `{ "detail": "Error interno del servidor..." }` sin revelar datos internos ni stack traces.
+   - `services/api/routes/suppliers.py`: Enueltas todas las operaciones con el repositorio en bloques `try/except Exception` retornando HTTP status y detalles utiles.
+   - `services/api/routes/incidents.py`: Enueltas las llamadas de consulta y listado en `try/except Exception` retornando HTTP 500 limpio en caso de fallos de infraestructura.
+2. **Frontend (`uis/backoffice`, `uis/talent-pipeline-tracker`, `uis/website`)**:
+   - `uis/backoffice/components/suppliers-directory.tsx`: Añadidos estados de carga (`isCreating`, `updatingSupplierId`) para deshabilitar botones e inputs en peticiones asincronas, limpieza en bloques `finally`, opcional chaining y fallbacks (`supplier.categorias_producto?.join(...) ?? "-"`).
+   - `uis/backoffice/app/api/incidents/results/export/route.ts`: Integrado `buildHeaders(request)` en el proxy fetch para eliminar warnings de variables no usadas y propagar autorizacion.
+   - `uis/backoffice/app/account/change-password/page.tsx`: Corregida la verificacion de autenticacion en cliente sin romper SSR ni violar reglas de lint de React 19.
+   - `uis/talent-pipeline-tracker/components/candidates/home-page-client.tsx`: Limpieza explicita del mensaje de evento antes de enviar la peticion de creacion.
+3. **Scripts de Python**:
+   - `scripts/analyze.py`: Añadido manejo de excepciones para la lectura del fichero CSV y parseo de datos (`OSError`, `UnicodeDecodeError`, `csv.Error`, `ValueError`) devolviendo mensaje claro y codigo de retorno 1.
+
+### Validaciones ejecutadas con evidencia real
+- **Backend Tests (`services/api`)**: `SECRET_KEY=test-secret-key-for-dev pytest -v` -> **21 passed** (100% de la suite).
+- **Frontend Backoffice (`uis/backoffice`)**:
+  - `npm run lint`: **0 errors, 0 warnings**.
+  - `npm run build`: **Compiled successfully (27/27 static pages)**.
+- **Frontend Talent Pipeline Tracker (`uis/talent-pipeline-tracker`)**:
+  - `npm run lint`: **0 errors, 0 warnings**.
+  - `npm run build`: **Compiled successfully (12/12 static pages)**.
+- **Frontend Website (`uis/website`)**:
+  - `npm run lint`: **0 errors, 0 warnings**.
+  - `npm run build`: **Compiled successfully (4/4 static pages)**.
+- **Scripts de Python (`scripts/analyze.py` y `scripts/seed_incidents.py`)**:
+  - `python3 scripts/analyze.py archivo_inexistente.csv`: Captura correctamente el error de archivo no encontrado y retorna codigo 1 sin lanzar stack trace.
+  - `python3 scripts/analyze.py incidents-COMPANY.csv`: Analiza 100 registros (70 validos, 30 invalidos) y genera reporte estructurado.
+  - `python3 scripts/seed_incidents.py`: Carga inicial de 70 registros validos y 30 descartados; segunda ejecucion valida la idempotencia (0 insertados, 70 omitidos).

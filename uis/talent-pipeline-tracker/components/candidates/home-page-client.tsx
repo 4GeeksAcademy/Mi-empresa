@@ -93,6 +93,7 @@ export function HomePageClient() {
   }, [loadCandidates]);
 
   async function handleCreateCandidate(payload: CandidateCreatePayload) {
+    setEventMessage(null);
     await createCandidate(payload);
     setEventMessage("Nueva candidatura registrada correctamente.");
     await loadCandidates();

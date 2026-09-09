@@ -2,11 +2,12 @@ from __future__ import annotations
 
 import csv
 import io
+import logging
 from typing import Any
 
-from fastapi import Depends, FastAPI, File, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 
 from auth import get_current_user
 from incidents import CsvFormatError, analyze_incidents_csv
@@ -16,7 +17,20 @@ from routes.profiles import router as profiles_router
 from routes.suppliers import router as suppliers_router
 from routes.users import router as users_router
 
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger("trackflow_api")
+
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0")
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    if isinstance(exc, HTTPException):
+        return JSONResponse(status_code=exc.status_code, content={"detail": exc.detail}, headers=getattr(exc, "headers", None))
+    logger.error("Excepcion no controlada en %s %s: %s", request.method, request.url.path, exc, exc_info=True)
+    return JSONResponse(
+        status_code=500,
+        content={"detail": "Error interno del servidor. Intentalo de nuevo mas tarde."},
+    )
 
 app.add_middleware(
     CORSMiddleware,
