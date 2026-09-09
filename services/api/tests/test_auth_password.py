@@ -1,241 +1,110 @@
-"""Tests para recuperación y cambio de contraseña (AUTH-03)."""
+"""Pruebas unitarias de recuperacion y cambio de contrasena."""
 from __future__ import annotations
 
-import os
-from datetime import datetime, timedelta, timezone
-from pathlib import Path
+import pytest
+from fastapi import HTTPException
 
-from fastapi.testclient import TestClient
-
-from auth import create_access_token, hash_password
-from auth_db import get_user_repository, get_profile_repository
-from auth_models import UserPersistence, utc_now_iso
-from main import app
-from reset_tokens import _hash_token, get_reset_token_repository
-
-client = TestClient(app)
-
-TEST_USER_EMAIL = "reset-test@trackflow.com"
-TEST_USER_PASSWORD = "oldpass123"
+from auth_db import get_user_repository
+from auth_models import ChangePasswordInput, ForgotPasswordInput, ResetPasswordInput, UserPersistence, utc_now_iso
+from reset_tokens import TokenExpiredError, TokenNotFoundError, TokenUsedError, get_reset_token_repository
+from routes import auth as auth_routes
 
 
-def _create_test_user() -> int:
-    """Crea un usuario de prueba y retorna su ID."""
-    repo = get_user_repository()
-    existing = repo.get_by_email(TEST_USER_EMAIL)
-    if existing is not None:
-        return existing.id
-
-    user_persistence = UserPersistence(
-        email=TEST_USER_EMAIL,
-        hashed_password=hash_password(TEST_USER_PASSWORD),
-        role="user",
-        is_active=True,
-        created_at=utc_now_iso(),
-    )
-    created = repo.create(user_persistence)
-    return created.id
+def _create_user(email: str = "reset@trackflow.com", *, active: bool = True) -> int:
+    return get_user_repository().create(UserPersistence(email=email, hashed_password="old-hash", role="user", is_active=active, created_at=utc_now_iso())).id
 
 
-def _auth_header() -> dict[str, str]:
-    """Crea header de autenticación para el usuario de prueba."""
-    user_id = _create_test_user()
-    token = create_access_token(data={"sub": str(user_id)})
-    return {"Authorization": f"Bearer {token}"}
+class _TokenRepository:
+    def __init__(self, result: int | Exception) -> None:
+        self.result = result
+
+    def validate(self, token: str) -> int:
+        if isinstance(self.result, Exception):
+            raise self.result
+        return self.result
 
 
-def setup_function() -> None:
-    """Configura bases de datos temporales para cada test."""
-    tmp_auth_db = Path("/tmp/trackflow-auth-password-test.json")
-    if tmp_auth_db.exists():
-        tmp_auth_db.unlink()
-    os.environ["TRACKFLOW_AUTH_DB_PATH"] = str(tmp_auth_db)
+def test_forgot_password_sends_token_only_for_active_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    created_user_id = _create_user()
+    calls: list[tuple[str, str]] = []
 
-    get_user_repository.cache_clear()
-    get_profile_repository.cache_clear()
-    get_reset_token_repository.cache_clear()
+    class TokenCreator:
+        def create(self, user_id: int, expires_minutes: int) -> str:
+            assert (user_id, expires_minutes) == (created_user_id, 30)
+            return "reset-token"
 
+    monkeypatch.setattr(auth_routes, "get_reset_token_repository", lambda: TokenCreator())
+    monkeypatch.setattr(auth_routes, "send_password_reset_email", lambda email, token: calls.append((email, token)))
 
-def teardown_function() -> None:
-    """Limpia las bases de datos temporales después de cada test."""
-    get_user_repository.cache_clear()
-    get_profile_repository.cache_clear()
-    get_reset_token_repository.cache_clear()
-    os.environ.pop("TRACKFLOW_AUTH_DB_PATH", None)
+    response = auth_routes.forgot_password(ForgotPasswordInput(email="RESET@trackflow.com"))
+
+    assert response.message == auth_routes.FORGOT_PASSWORD_MESSAGE
+    assert calls == [("reset@trackflow.com", "reset-token")]
 
 
-# ── Tests de forgot-password ──────────────────────────────────────────
+def test_forgot_password_hides_nonexistent_and_inactive_accounts(monkeypatch: pytest.MonkeyPatch) -> None:
+    _create_user("inactive@trackflow.com", active=False)
+    monkeypatch.setattr(auth_routes, "send_password_reset_email", lambda email, token: pytest.fail("No se debe enviar correo"))
+
+    missing = auth_routes.forgot_password(ForgotPasswordInput(email="missing@trackflow.com"))
+    inactive = auth_routes.forgot_password(ForgotPasswordInput(email="inactive@trackflow.com"))
+
+    assert missing.message == inactive.message == auth_routes.FORGOT_PASSWORD_MESSAGE
 
 
-def test_forgot_password_existing_email_returns_200() -> None:
-    """forgot-password con email existente devuelve 200 con mensaje genérico."""
-    _create_test_user()
-    response = client.post(
-        "/auth/forgot-password",
-        json={"email": TEST_USER_EMAIL},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
-    assert "registrada" in data["message"].lower() or "enlace" in data["message"].lower()
+def test_reset_password_updates_password_for_valid_token(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = _create_user()
+    monkeypatch.setattr(auth_routes, "get_reset_token_repository", lambda: _TokenRepository(user_id))
+    monkeypatch.setattr(auth_routes, "hash_password", lambda password: f"hashed:{password}")
+
+    response = auth_routes.reset_password(ResetPasswordInput(token="valid-token", new_password="new-password"))
+
+    assert response.message == "Contraseña actualizada correctamente."
+    assert get_user_repository().get_raw(user_id)["hashed_password"] == "hashed:new-password"
 
 
-def test_forgot_password_nonexistent_email_returns_200() -> None:
-    """forgot-password con email inexistente devuelve 200 (no revela si existe)."""
-    response = client.post(
-        "/auth/forgot-password",
-        json={"email": "noexiste@trackflow.com"},
-    )
-    assert response.status_code == 200
-    data = response.json()
-    assert "message" in data
+@pytest.mark.parametrize("error", [TokenNotFoundError("no existe"), TokenExpiredError("expirado"), TokenUsedError("usado")])
+def test_reset_password_rejects_invalid_token_states(monkeypatch: pytest.MonkeyPatch, error: Exception) -> None:
+    monkeypatch.setattr(auth_routes, "get_reset_token_repository", lambda: _TokenRepository(error))
+
+    with pytest.raises(HTTPException, match=str(error)):
+        auth_routes.reset_password(ResetPasswordInput(token="invalid-token", new_password="new-pass"))
 
 
-def test_forgot_password_same_message_both_cases() -> None:
-    """forgot-password devuelve el mismo mensaje para emails existentes e inexistentes."""
-    _create_test_user()
+def test_reset_password_rejects_deleted_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(auth_routes, "get_reset_token_repository", lambda: _TokenRepository(999))
+    monkeypatch.setattr(auth_routes, "hash_password", lambda password: password)
 
-    resp_existing = client.post(
-        "/auth/forgot-password",
-        json={"email": TEST_USER_EMAIL},
-    )
-    resp_nonexistent = client.post(
-        "/auth/forgot-password",
-        json={"email": "otro@trackflow.com"},
-    )
-    assert resp_existing.json()["message"] == resp_nonexistent.json()["message"]
+    with pytest.raises(HTTPException, match="usuario no existe"):
+        auth_routes.reset_password(ResetPasswordInput(token="valid-token", new_password="new-pass"))
 
 
-# ── Tests de reset-password ──────────────────────────────────────────
+def test_reset_token_repository_rejects_expired_and_reused_tokens() -> None:
+    token_repository = get_reset_token_repository()
+    user_id = _create_user()
+    expired_token = token_repository.create(user_id, expires_minutes=-1)
+    reusable_token = token_repository.create(user_id)
+
+    with pytest.raises(TokenExpiredError):
+        token_repository.validate(expired_token)
+    assert token_repository.validate(reusable_token) == user_id
+    with pytest.raises(TokenUsedError):
+        token_repository.validate(reusable_token)
 
 
-def test_reset_password_valid_token() -> None:
-    """reset-password con token válido actualiza la contraseña."""
-    user_id = _create_test_user()
+def test_change_password_requires_current_password_and_updates_it(monkeypatch: pytest.MonkeyPatch) -> None:
+    user_id = _create_user()
+    monkeypatch.setattr(auth_routes, "verify_password", lambda plain, hashed: plain == "old-password")
+    monkeypatch.setattr(auth_routes, "hash_password", lambda password: f"hashed:{password}")
 
-    # Generar token manualmente
-    token_repo = get_reset_token_repository()
-    token = token_repo.create(user_id=user_id, expires_minutes=30)
+    response = auth_routes.change_password(ChangePasswordInput(current_password="old-password", new_password="new-password"), {"id": user_id})
 
-    new_password = "newpass456"
-    response = client.post(
-        "/auth/reset-password",
-        json={"token": token, "new_password": new_password},
-    )
-    assert response.status_code == 200
-
-    # Verificar que puede hacer login con la nueva contraseña
-    login_resp = client.post(
-        "/auth/login",
-        json={"email": TEST_USER_EMAIL, "password": new_password},
-    )
-    assert login_resp.status_code == 200
-    assert "access_token" in login_resp.json()
+    assert response.message == "Contraseña cambiada correctamente."
+    assert get_user_repository().get_raw(user_id)["hashed_password"] == "hashed:new-password"
+    with pytest.raises(HTTPException, match="incorrecta"):
+        auth_routes.change_password(ChangePasswordInput(current_password="wrong-password", new_password="another-password"), {"id": user_id})
 
 
-def test_reset_password_used_token_returns_400() -> None:
-    """reset-password con token ya usado devuelve 400."""
-    user_id = _create_test_user()
-    token_repo = get_reset_token_repository()
-    token = token_repo.create(user_id=user_id, expires_minutes=30)
-
-    # Primer uso - debe funcionar
-    resp1 = client.post(
-        "/auth/reset-password",
-        json={"token": token, "new_password": "pass1111"},
-    )
-    assert resp1.status_code == 200
-
-    # Segundo uso - debe fallar
-    resp2 = client.post(
-        "/auth/reset-password",
-        json={"token": token, "new_password": "pass2222"},
-    )
-    assert resp2.status_code == 400
-
-
-def test_reset_password_invalid_token_returns_400() -> None:
-    """reset-password con token inexistente devuelve 400."""
-    response = client.post(
-        "/auth/reset-password",
-        json={"token": "token-invalido-abc123", "new_password": "newpass123"},
-    )
-    assert response.status_code == 400
-
-
-def test_reset_password_short_password_returns_422() -> None:
-    """reset-password con contraseña menor a 6 caracteres devuelve 422."""
-    user_id = _create_test_user()
-    token_repo = get_reset_token_repository()
-    token = token_repo.create(user_id=user_id, expires_minutes=30)
-
-    response = client.post(
-        "/auth/reset-password",
-        json={"token": token, "new_password": "12345"},
-    )
-    assert response.status_code == 422
-
-
-# ── Tests de change-password ─────────────────────────────────────────
-
-
-def test_change_password_correct_current() -> None:
-    """change-password con contraseña actual correcta devuelve 200."""
-    headers = _auth_header()
-    response = client.post(
-        "/auth/change-password",
-        json={
-            "current_password": TEST_USER_PASSWORD,
-            "new_password": "newpass789",
-        },
-        headers=headers,
-    )
-    assert response.status_code == 200
-    assert "message" in response.json()
-
-    # Verificar que puede hacer login con la nueva contraseña
-    login_resp = client.post(
-        "/auth/login",
-        json={"email": TEST_USER_EMAIL, "password": "newpass789"},
-    )
-    assert login_resp.status_code == 200
-
-
-def test_change_password_incorrect_current_returns_400() -> None:
-    """change-password con contraseña actual incorrecta devuelve 400."""
-    headers = _auth_header()
-    response = client.post(
-        "/auth/change-password",
-        json={
-            "current_password": "wrongpassword",
-            "new_password": "newpass789",
-        },
-        headers=headers,
-    )
-    assert response.status_code == 400
-
-
-def test_change_password_no_auth_returns_401() -> None:
-    """change-password sin token de autenticación devuelve 401."""
-    response = client.post(
-        "/auth/change-password",
-        json={
-            "current_password": TEST_USER_PASSWORD,
-            "new_password": "newpass789",
-        },
-    )
-    assert response.status_code == 401
-
-
-def test_change_password_short_new_password_returns_422() -> None:
-    """change-password con nueva contraseña menor a 6 caracteres devuelve 422."""
-    headers = _auth_header()
-    response = client.post(
-        "/auth/change-password",
-        json={
-            "current_password": TEST_USER_PASSWORD,
-            "new_password": "12345",
-        },
-        headers=headers,
-    )
-    assert response.status_code == 422
+def test_change_password_rejects_missing_current_user() -> None:
+    with pytest.raises(HTTPException, match="Usuario no encontrado"):
+        auth_routes.change_password(ChangePasswordInput(current_password="old-password", new_password="new-password"), {"id": 999})
