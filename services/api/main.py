@@ -3,6 +3,8 @@ from __future__ import annotations
 import csv
 import io
 import logging
+from collections.abc import AsyncIterator
+from contextlib import asynccontextmanager
 from typing import Any
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
@@ -10,9 +12,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 
 from auth import get_current_user
+from database import init_inventory_db
 from incidents import CsvFormatError, analyze_incidents_csv
 from routes.auth import router as auth_router
 from routes.incidents import router as incidents_router
+from routes.inventory import router as inventory_router
 from routes.profiles import router as profiles_router
 from routes.suppliers import router as suppliers_router
 from routes.users import router as users_router
@@ -20,7 +24,14 @@ from routes.users import router as users_router
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("trackflow_api")
 
-app = FastAPI(title="TrackFlow Incidents API", version="1.0.0")
+
+@asynccontextmanager
+async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+    init_inventory_db()
+    yield
+
+
+app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
@@ -45,6 +56,7 @@ app.include_router(suppliers_router)
 app.include_router(auth_router)
 app.include_router(users_router)
 app.include_router(profiles_router)
+app.include_router(inventory_router)
 
 _last_export_csv_bytes: bytes | None = None
 

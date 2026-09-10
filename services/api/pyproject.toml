@@ -6,10 +6,10 @@ build-backend = "setuptools.build_meta"
 package = true
 
 [tool.setuptools]
-py-modules = ["seed", "database", "models", "auth_models", "auth_db", "auth"]
+py-modules = ["seed", "seed_inventory", "database", "models", "schemas", "auth_models", "auth_db", "auth"]
 
 [tool.setuptools.packages.find]
-include = ["seed*", "database*", "models*", "auth_models*", "auth_db*", "auth*", "routes*", "incidents*"]
+include = ["seed*", "database*", "models*", "schemas*", "auth_models*", "auth_db*", "auth*", "routes*", "incidents*"]
 
 [project]
 name = "trackflow-api"
@@ -25,6 +25,8 @@ dependencies = [
     "passlib[bcrypt]>=1.7",
     "bcrypt==4.1.2",
     "python-dotenv>=1.1",
+    "sqlmodel>=0.0.42",
+    "psycopg2-binary>=2.9.13",
 ]
 
 [project.optional-dependencies]
@@ -35,3 +37,4 @@ dev = ["pytest-cov>=7.1"]
 
 [project.scripts]
 seed = "seed:run_seed"
+seed-inventory = "seed_inventory:run_inventory_seed"

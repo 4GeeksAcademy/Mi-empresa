@@ -1,9 +1,11 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from enum import Enum
+from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
+from sqlalchemy import UniqueConstraint
+from sqlmodel import Field as SQLField
+from sqlmodel import Relationship, SQLModel
 
 
 class SupplierCountry(str, Enum):
@@ -71,3 +73,50 @@ class SupplierFilters(BaseModel):
 
 def utc_now_iso() -> str:
     return datetime.now(timezone.utc).replace(microsecond=0).isoformat()
+
+
+# --- Modelos ORM (SQLModel, table=True) para inventario en Supabase ---
+# Separados semanticamente de los Pydantic de arriba: estas clases mapean tablas reales.
+
+
+class Warehouse(str, Enum):
+    LOS_ANGELES = "los_angeles"
+    ZARAGOZA = "zaragoza"
+
+
+def utc_now() -> datetime:
+    return datetime.now(timezone.utc)
+
+
+class Product(SQLModel, table=True):
+    # Mismo SKU puede existir en ambos almacenes con stock independiente por particion.
+    __table_args__ = (UniqueConstraint("sku", "warehouse", name="uq_product_sku_warehouse"),)
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    name: str = SQLField(min_length=1, max_length=120)
+    sku: str = SQLField(min_length=1, max_length=64, index=True)
+    warehouse: Warehouse
+
+    inbound_orders: List["InboundOrder"] = Relationship(back_populates="product")
+    outbound_orders: List["OutboundOrder"] = Relationship(back_populates="product")
+
+
+class InboundOrder(SQLModel, table=True):
+    id: int | None = SQLField(default=None, primary_key=True)
+    product_id: int = SQLField(foreign_key="product.id")
+    quantity: int = SQLField(gt=0)
+    created_at: datetime = SQLField(default_factory=utc_now)
+    # Referencia al id de usuario de TinyDB (no hay tabla de usuarios en Supabase).
+    user_uuid: str
+
+    product: Product | None = Relationship(back_populates="inbound_orders")
+
+
+class OutboundOrder(SQLModel, table=True):
+    id: int | None = SQLField(default=None, primary_key=True)
+    product_id: int = SQLField(foreign_key="product.id")
+    quantity: int = SQLField(gt=0)
+    created_at: datetime = SQLField(default_factory=utc_now)
+    user_uuid: str
+
+    product: Product | None = Relationship(back_populates="outbound_orders")
