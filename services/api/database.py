@@ -1,10 +1,13 @@
 from __future__ import annotations
 
 import os
+from collections.abc import Iterator
 from functools import lru_cache
 from pathlib import Path
 from typing import Any
 
+from dotenv import load_dotenv
+from sqlmodel import Session, SQLModel, create_engine
 from tinydb import Query, TinyDB
 
 from models import (
@@ -18,7 +21,35 @@ from models import (
     utc_now_iso,
 )
 
+load_dotenv()
+
 DEFAULT_DB_PATH = Path(__file__).resolve().parent / "data" / "suppliers.json"
+
+
+def _resolve_database_url() -> str:
+    database_url = os.getenv("DATABASE_URL")
+    if not database_url:
+        raise RuntimeError(
+            "DATABASE_URL no configurada. Define DATABASE_URL (Supabase) en el archivo .env."
+        )
+    return database_url
+
+
+@lru_cache
+def get_engine() -> Any:
+    return create_engine(_resolve_database_url())
+
+
+def init_inventory_db() -> None:
+    """Crea el esquema de inventario en Supabase si no existe."""
+    # Product/InboundOrder/OutboundOrder ya estan registrados en SQLModel.metadata
+    # porque este modulo importa `models` (arriba) antes de llamar a create_all.
+    SQLModel.metadata.create_all(get_engine())
+
+
+def get_db() -> Iterator[Session]:
+    with Session(get_engine()) as session:
+        yield session
 
 
 class SupplierRepository:

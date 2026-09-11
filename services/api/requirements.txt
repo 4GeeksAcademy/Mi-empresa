@@ -8,3 +8,5 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 bcrypt==4.1.2
 python-dotenv==1.1.0
+sqlmodel==0.0.42
+psycopg2-binary==2.9.13
