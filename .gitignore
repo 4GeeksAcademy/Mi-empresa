@@ -63,3 +63,5 @@ pnpm-debug.log*
 logs/
 tmp/
 temp/
+
+services/api/data/auth.json
