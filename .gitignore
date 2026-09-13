@@ -64,4 +64,4 @@ logs/
 tmp/
 temp/
 
-services/api/data/auth.json
+services/api/data/*.json
