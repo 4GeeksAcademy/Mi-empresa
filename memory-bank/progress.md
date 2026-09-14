@@ -401,3 +401,26 @@
 
 ### Cambio aplicado
 - `.gitignore`: generalizado `services/api/data/*.json` para evitar que datos locales generados por la API se añadan accidentalmente al repositorio.
+
+## 2026-09-14 (Pruebas automatizadas del router de inventario)
+
+### Objetivo de esta ejecucion
+- Ampliar la cobertura automatizada de `/inventory` tras la sugerencia del profesor, sin modificar los contratos ni la implementacion productiva.
+
+### Cambios implementados
+- `services/api/tests/test_inventory.py`:
+	- Fixture compartido con SQLite en memoria y aislamiento de la inicializacion `lifespan` mediante una base SQLite temporal.
+	- Pruebas de listado de productos, detalle y producto inexistente.
+	- Pruebas de payloads invalidos, cantidades no positivas y movimientos para productos inexistentes.
+	- Prueba de salida con cantidad exacta al stock disponible.
+	- Prueba del historial combinado de entradas/salidas y su orden cronologico.
+	- Pruebas de autenticacion para entradas y salidas, ademas de la creacion de productos.
+	- Conservadas las pruebas existentes de flujo feliz, duplicados, particion por almacen y stock insuficiente.
+
+### Validaciones ejecutadas
+- `SECRET_KEY=test-secret-key-for-inventory python -m pytest tests/test_inventory.py -q` -> **12 passed**.
+- `SECRET_KEY=test-secret-key-for-inventory python -m pytest -q` -> **59 passed**.
+- La medicion con `--cov` no pudo ejecutarse porque `pytest-cov` no esta instalado en el entorno actual.
+
+### Riesgos y deuda tecnica
+- Persisten 35 avisos deprecados de `python-jose` relacionados con `datetime.utcnow()`; no proceden de los cambios de esta tarea.
