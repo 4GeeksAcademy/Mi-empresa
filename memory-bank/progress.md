@@ -285,3 +285,142 @@
 ### Riesgos y deuda tecnica
 - `CONTEXT.md` del repo es el briefing general de la empresa y no contiene nombres de entidad ni reglas de particion especificas para inventario; si el profesor aporta un documento mas detallado, puede requerir renombrar entidades o ajustar el alcance de particion.
 - Sigue sin haber tests `pytest` dedicados al router `/inventory`; la cobertura depende de las pruebas manuales E2E documentadas aqui.
+
+## 2026-09-13 (Hito 5 - Interfaz de gestión de inventario)
+
+### Objetivo de esta ejecucion
+- Construir el backoffice de inventario conectado a la API real de `/inventory`, con autenticacion y flujos de entrada, salida e historial.
+
+### Cambios implementados
+- `uis/backoffice/lib/inventory.ts`: tipos de `Product` y `InventoryOrder`, cliente centralizado para los cinco endpoints de inventario, propagacion de JWT y errores legibles desde `detail`.
+- `uis/backoffice/components/inventory.tsx`: listado de productos, formularios reutilizables de entrada/salida e historial de solo lectura, con estados de carga, vacio, exito y error.
+- `uis/backoffice/app/backoffice/inventory/**`: rutas protegidas para productos, orden de entrada, orden de salida e historial.
+- `uis/backoffice/components/shell.tsx`: enlace de navegacion a inventario.
+- `uis/backoffice/app/layout.tsx`: eliminado el render duplicado de `children` para evitar mostrar dos veces cada vista.
+- `uis/backoffice/README.md`: documentadas las rutas, variable de entorno y umbral visual de stock bajo.
+
+### Decisiones de interfaz
+- Los almacenes `los_angeles` y `zaragoza` se muestran como “Los Ángeles” y “Zaragoza”.
+- El stock bajo se marca en `current_stock <= 10`; es una alerta visual y no sustituye la validacion de stock del backend.
+- Las acciones de cada producto conservan el `product_id` mediante query string para abrir directamente el formulario correspondiente.
+
+### Validaciones ejecutadas
+- `cd uis/backoffice && npm install` -> dependencias instaladas.
+- `npm run lint` -> OK, 0 errores y 0 avisos.
+- `npm test -- --runInBand` -> 1 suite, 3 tests OK.
+- `npm run build` -> OK, 31 rutas generadas.
+- `npx tsc --noEmit` -> OK tras instalar las dependencias locales.
+
+### Riesgos y deuda tecnica
+- No se pudo ejecutar una prueba manual E2E contra el backend en esta ejecucion porque no se verifico un servicio activo con credenciales de usuario.
+- La API actual no tiene tests pytest dedicados al router `/inventory`; la interfaz consume el contrato existente y muestra sus errores HTTP.
+
+## 2026-09-13 (Auditoria de criterios del Hito 5)
+
+### Auditoria y correcciones
+- Confirmada la ausencia de llamadas `fetch` en `components/inventory.tsx`; todas las peticiones pasan por `lib/inventory.ts`.
+- Mejorada la extraccion de errores para conservar tambien detalles no string devueltos por la API.
+- Añadido aviso reactivo cuando una salida supera el `current_stock`, antes del envio.
+- Los errores `400` de salida se muestran junto al campo de cantidad.
+- Corregido el refresco del producto seleccionado para evitar datos obsoletos al cambiar de producto.
+- Los fallos al actualizar el detalle del producto ya no se silencian y los `401` redirigen a `/login`.
+
+### Validaciones finales
+- `npm run lint` -> OK.
+- `npm test -- --runInBand` -> 1 suite, 3 tests OK.
+- `npm run build` -> OK, 31 rutas generadas, incluidas las cuatro de inventario.
+- `npx tsc --noEmit` -> OK.
+- Busqueda de `fetch` en `components/inventory.tsx` -> 0 resultados.
+- Busqueda de `Authorization` y endpoints en `lib/inventory.ts` -> header Bearer y 5 operaciones confirmadas.
+- Diagnosticos del editor en archivos modificados -> sin errores.
+- `git diff --check` -> OK.
+
+### Riesgo pendiente
+- Sigue pendiente una prueba E2E manual contra un backend activo con credenciales reales; no se modifico el contrato de la API.
+
+## 2026-09-13 (Correccion de conexion del frontend de inventario)
+
+### Problema detectado
+- La interfaz mostraba “No se pudo conectar con el servicio de inventario” aunque FastAPI respondia correctamente en el contenedor.
+- La causa era que el navegador accedia directamente a `http://localhost:8000`; en un entorno remoto ese `localhost` pertenece al host del navegador y no necesariamente al contenedor.
+
+### Correccion
+- `uis/backoffice/lib/inventory.ts`: el cliente usa `/api/inventory` por defecto en lugar de una URL localhost directa.
+- `uis/backoffice/app/api/inventory/[...path]/route.ts`: nuevo proxy interno que reenvia GET y POST al backend, conserva `Authorization` y devuelve los errores HTTP de la API.
+- `uis/backoffice/README.md`: documentadas `NEXT_PUBLIC_INVENTORY_API_URL` e `INVENTORY_API_INTERNAL_URL`.
+
+### Validacion ejecutada
+- API temporal SQLite y autenticacion temporal levantadas correctamente.
+- `GET /api/inventory/products` autenticado -> `200`.
+- `POST /api/inventory/orders/inbound` autenticado a traves del proxy -> `201`.
+- `npm run lint` -> OK.
+- `npm test -- --runInBand` -> 3 tests OK.
+- `npm run build` -> OK, incluida la ruta `ƒ /api/inventory/[...path]`.
+- `npx tsc --noEmit` -> OK.
+
+### Nota operativa
+- Para despliegues, el backend interno puede configurarse con `INVENTORY_API_INTERNAL_URL`; el navegador no necesita conocer el puerto interno de FastAPI.
+
+## 2026-09-13 (Correccion de prefijo duplicado en inventario)
+
+### Problema detectado
+- La vista mostraba `Not Found` y cero productos porque la URL resultante era `/api/inventory/inventory/products`.
+- El doble prefijo se producia al combinar la base `/api/inventory` con rutas que ya empezaban por `/inventory`.
+
+### Correccion
+- `uis/backoffice/lib/inventory.ts`: añadido un prefijo de ruta condicional; usa `/api/inventory/products` con el proxy y `/inventory/products` cuando se configura una URL directa del backend.
+
+### Validacion
+- El proxy ahora reenvia correctamente a `/inventory/products` y devuelve `200` con los productos.
+- `npm run lint` -> OK.
+- `npm test -- --runInBand` -> 3 tests OK.
+- `npm run build` -> OK, 31 rutas generadas.
+- `git diff --check` -> OK.
+
+## 2026-09-13 (Compatibilidad con bundle antiguo del navegador)
+
+### Problema observado
+- Algunas pestañas conservaban un bundle que seguia llamando `/api/inventory/inventory/products`, provocando `Not Found` aunque el cliente actualizado ya usaba `/api/inventory/products`.
+
+### Correccion
+- `uis/backoffice/app/api/inventory/[...path]/route.ts`: el proxy elimina un segmento inicial `inventory` duplicado antes de reenviar la peticion al backend.
+
+### Validacion
+- Lint -> OK.
+- La URL antigua `/api/inventory/inventory/products` -> `200` con los productos reales.
+- La URL actual `/api/inventory/products` -> `200` con los productos reales.
+
+## 2026-09-13 (Auditoria de configuracion local y secretos)
+
+### Comprobaciones
+- `.env.local` y cualquier `.env.*` quedan cubiertos por `.env.*` en `.gitignore`.
+- `.env`, `services/api/data/auth.json` y los JSON runtime de `services/api/data/` quedan ignorados.
+- No hay archivos de claves o certificados versionados.
+- No se encontraron patrones de tokens reales, API keys privadas ni cabeceras Bearer con valores concretos en archivos trackeados.
+- Las plantillas `.env.example` contienen placeholders, no secretos.
+
+### Cambio aplicado
+- `.gitignore`: generalizado `services/api/data/*.json` para evitar que datos locales generados por la API se añadan accidentalmente al repositorio.
+
+## 2026-09-14 (Pruebas automatizadas del router de inventario)
+
+### Objetivo de esta ejecucion
+- Ampliar la cobertura automatizada de `/inventory` tras la sugerencia del profesor, sin modificar los contratos ni la implementacion productiva.
+
+### Cambios implementados
+- `services/api/tests/test_inventory.py`:
+	- Fixture compartido con SQLite en memoria y aislamiento de la inicializacion `lifespan` mediante una base SQLite temporal.
+	- Pruebas de listado de productos, detalle y producto inexistente.
+	- Pruebas de payloads invalidos, cantidades no positivas y movimientos para productos inexistentes.
+	- Prueba de salida con cantidad exacta al stock disponible.
+	- Prueba del historial combinado de entradas/salidas y su orden cronologico.
+	- Pruebas de autenticacion para entradas y salidas, ademas de la creacion de productos.
+	- Conservadas las pruebas existentes de flujo feliz, duplicados, particion por almacen y stock insuficiente.
+
+### Validaciones ejecutadas
+- `SECRET_KEY=test-secret-key-for-inventory python -m pytest tests/test_inventory.py -q` -> **12 passed**.
+- `SECRET_KEY=test-secret-key-for-inventory python -m pytest -q` -> **59 passed**.
+- La medicion con `--cov` no pudo ejecutarse porque `pytest-cov` no esta instalado en el entorno actual.
+
+### Riesgos y deuda tecnica
+- Persisten 35 avisos deprecados de `python-jose` relacionados con `datetime.utcnow()`; no proceden de los cambios de esta tarea.

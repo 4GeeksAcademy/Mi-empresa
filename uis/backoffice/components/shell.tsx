@@ -72,6 +72,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Directorio de proveedores
             </Link>
             <Link
+              href="/backoffice/inventory/products"
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Inventario
+            </Link>
+            <Link
               href="/account/profile"
               className="ml-auto rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >
