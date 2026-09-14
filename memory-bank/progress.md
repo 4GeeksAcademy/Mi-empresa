@@ -399,6 +399,27 @@
 - No se encontraron patrones de tokens reales, API keys privadas ni cabeceras Bearer con valores concretos en archivos trackeados.
 - Las plantillas `.env.example` contienen placeholders, no secretos.
 
+## 2026-09-14 (Containerizacion del monorepo)
+
+### Cambios implementados
+- Creado `uis/Dockerfile` con Node Alpine, instalacion separada de `website` y `backoffice`, y `uis/start.sh` para ejecutar ambos Next.js con recarga en caliente en los puertos 3000 y 3001.
+- Creado `services/Dockerfile` con Python, `uv` y FastAPI en modo `--reload` sobre el puerto 8000.
+- Creado `docker-compose.yml` con bind mounts, volumenes persistentes para `node_modules`, red explicita `trackflow-dev` y comunicacion interna mediante `backend:8000`.
+- Anadidos `.dockerignore` para ambas superficies y `.env.example`; el `.env` local queda ignorado por Git.
+- El backoffice conserva el import compartido desde `/src` mediante un bind mount adicional, sin duplicar logica.
+
+### Validaciones ejecutadas
+- `docker compose config` -> OK; variables, red `trackflow-dev` y volumenes resueltos.
+- `docker compose build` -> OK para `interfaces` y `backend`.
+- `docker compose up -d --build` -> backend saludable e interfaces iniciadas.
+- Comprobaciones HTTP desde el host: `website` `200` en `localhost:3000`, `backoffice` `200` en `localhost:3001` y `/health` `200` en `localhost:8000`.
+- Lint dentro del contenedor para `website` y `backoffice` -> OK.
+- `pytest -q` dentro del contenedor backend -> 59 passed.
+- El nombre `backend` resuelve desde `interfaces` a `172.18.0.2`; la conexión bridge entre contenedores agota timeout en este Docker anidado, aunque el backend responde por su IP desde sí mismo y por el puerto publicado desde el host.
+
+### Riesgo pendiente
+- Verificar la conectividad HTTP entre contenedores en un runtime Docker no anidado. Compose mantiene las URLs internas en `http://backend:8000` y no usa `localhost` para comunicación entre servicios.
+
 ### Cambio aplicado
 - `.gitignore`: generalizado `services/api/data/*.json` para evitar que datos locales generados por la API se añadan accidentalmente al repositorio.
 

@@ -36,6 +36,10 @@ pip install -r requirements.txt
 uvicorn main:app --reload --port 8000
 ```
 
+Desde la raiz del monorepo, la alternativa recomendada es `docker compose up`.
+El servicio usa `DATABASE_URL` y `SECRET_KEY` del `.env` raiz; los valores de
+`.env.example` son placeholders exclusivos para desarrollo.
+
 ## Tests
 
 ```bash
