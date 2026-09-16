@@ -1,0 +1,57 @@
+services:
+  interfaces:
+    build:
+      context: ./uis
+      dockerfile: Dockerfile
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      INVENTORY_API_INTERNAL_URL: ${INVENTORY_API_INTERNAL_URL:-http://backend:8000}
+      INCIDENTS_API_INTERNAL_URL: ${INCIDENTS_API_INTERNAL_URL:-http://backend:8000}
+    ports:
+      - "${WEBSITE_PORT:-3000}:3000"
+      - "${BACKOFFICE_PORT:-3001}:3001"
+    volumes:
+      - ./uis:/app
+      - ./src:/src:ro
+      - website_node_modules:/app/website/node_modules
+      - backoffice_node_modules:/app/backoffice/node_modules
+    networks:
+      - trackflow-dev
+    depends_on:
+      backend:
+        condition: service_healthy
+    command: ["bash", "/app/start.sh"]
+
+  backend:
+    build:
+      context: ./services
+      dockerfile: Dockerfile
+    working_dir: /app/api
+    env_file:
+      - .env
+    environment:
+      PYTHONPATH: /app:/app/api
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    volumes:
+      - ./services:/app
+      - ./packages:/app/packages:ro
+    networks:
+      - trackflow-dev
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+      start_period: 10s
+    command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+volumes:
+  website_node_modules:
+  backoffice_node_modules:
+
+networks:
+  trackflow-dev:
+    name: trackflow-dev

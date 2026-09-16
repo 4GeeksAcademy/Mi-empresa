@@ -19,3 +19,9 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 	- `DELETE /suppliers/{id}`: removes supplier by id.
 
 > _Spanish version: [README.es.md](./README.es.md)._
+
+## Desarrollo con Docker
+
+El backend se inicia desde la raiz con `docker compose up` y queda disponible en
+el puerto 8000. El contenedor ejecuta FastAPI con `--reload`; su configuracion de
+desarrollo se carga desde el `.env` de la raiz.

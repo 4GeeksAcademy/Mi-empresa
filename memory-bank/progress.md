@@ -211,6 +211,27 @@
 - El fixture de pruebas provee una clave JWT efimera, de modo que las pruebas no requieren un secreto local.
 - Anadida configuracion Jest ESM (`src/jest.config.cjs`) y pruebas de las cuatro utilidades TypeScript. `npm test -- --coverage`: 6 passed, 75.25% de statements y 100% de funciones.
 
+## 2026-09-16
+
+### Objetivo de esta ejecucion
+- Corregir la validacion pendiente de comunicacion entre interfaces y backend dentro de Docker.
+- Unificar la instalacion de dependencias frontend con `npm ci` para reproducibilidad y estabilidad del build.
+
+### Cambios implementados
+- Se genero el lockfile faltante de `uis/website` para permitir `npm ci` en Docker.
+- Se ajusto la configuracion de `docker-compose.yml` para definir `INCIDENTS_API_INTERNAL_URL` y `INVENTORY_API_INTERNAL_URL` con valor por defecto `http://backend:8000`.
+- Se unifico el uso de `http://backend:8000` en los proxies del backoffice y talent tracker, dejando el valor `127.0.0.1` solo como fallback en entornos host sin Docker.
+- Se actualizo `uis/Dockerfile` para ejecutar `npm ci` en ambas apps frontend.
+
+### Validaciones ejecutadas
+- `docker compose build` -> OK.
+- `docker compose up -d` -> OK.
+- `curl http://localhost:8000/health` -> `{"status":"ok"}`.
+- Deteccion real desde dentro del contenedor `interfaces` con Node: `fetch('http://backend:8000/health')` -> HTTP 200 y cuerpo `{"status":"ok"}`.
+
+### Decision tecnica relevante
+- El problema no era el DNS de Docker sino un fallback local (`127.0.0.1:8000`) que funciona en host pero no dentro de los contenedores. Se corrige usando el nombre del servicio `backend` y el valor por defecto consistente en Compose.
+
 ## 2026-09-09 (API-042 y FE-019 - Cobertura extra)
 
 ### Objetivo de esta ejecucion
@@ -398,6 +419,27 @@
 - No hay archivos de claves o certificados versionados.
 - No se encontraron patrones de tokens reales, API keys privadas ni cabeceras Bearer con valores concretos en archivos trackeados.
 - Las plantillas `.env.example` contienen placeholders, no secretos.
+
+## 2026-09-14 (Containerizacion del monorepo)
+
+### Cambios implementados
+- Creado `uis/Dockerfile` con Node Alpine, instalacion separada de `website` y `backoffice`, y `uis/start.sh` para ejecutar ambos Next.js con recarga en caliente en los puertos 3000 y 3001.
+- Creado `services/Dockerfile` con Python, `uv` y FastAPI en modo `--reload` sobre el puerto 8000.
+- Creado `docker-compose.yml` con bind mounts, volumenes persistentes para `node_modules`, red explicita `trackflow-dev` y comunicacion interna mediante `backend:8000`.
+- Anadidos `.dockerignore` para ambas superficies y `.env.example`; el `.env` local queda ignorado por Git.
+- El backoffice conserva el import compartido desde `/src` mediante un bind mount adicional, sin duplicar logica.
+
+### Validaciones ejecutadas
+- `docker compose config` -> OK; variables, red `trackflow-dev` y volumenes resueltos.
+- `docker compose build` -> OK para `interfaces` y `backend`.
+- `docker compose up -d --build` -> backend saludable e interfaces iniciadas.
+- Comprobaciones HTTP desde el host: `website` `200` en `localhost:3000`, `backoffice` `200` en `localhost:3001` y `/health` `200` en `localhost:8000`.
+- Lint dentro del contenedor para `website` y `backoffice` -> OK.
+- `pytest -q` dentro del contenedor backend -> 59 passed.
+- El nombre `backend` resuelve desde `interfaces` a `172.18.0.2`; la conexión bridge entre contenedores agota timeout en este Docker anidado, aunque el backend responde por su IP desde sí mismo y por el puerto publicado desde el host.
+
+### Riesgo pendiente
+- Verificar la conectividad HTTP entre contenedores en un runtime Docker no anidado. Compose mantiene las URLs internas en `http://backend:8000` y no usa `localhost` para comunicación entre servicios.
 
 ### Cambio aplicado
 - `.gitignore`: generalizado `services/api/data/*.json` para evitar que datos locales generados por la API se añadan accidentalmente al repositorio.
