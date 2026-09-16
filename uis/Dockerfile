@@ -5,7 +5,7 @@ RUN apk add --no-cache bash
 WORKDIR /app
 
 COPY website/package*.json ./website/
-RUN cd website && npm install
+RUN cd website && npm ci
 
 COPY backoffice/package*.json ./backoffice/
 RUN cd backoffice && npm ci

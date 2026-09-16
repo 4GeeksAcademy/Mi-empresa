@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://127.0.0.1:8000";
+const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
 function buildHeaders(request: Request): Record<string, string> {
   const headers: Record<string, string> = {};

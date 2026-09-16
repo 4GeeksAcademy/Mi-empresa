@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 const BACKEND_BASE_URL =
   process.env.INVENTORY_API_INTERNAL_URL ??
   process.env.INCIDENTS_API_INTERNAL_URL ??
-  "http://127.0.0.1:8000";
+  "http://backend:8000";
 
 interface RouteParams {
   params: Promise<{ path: string[] }>;
