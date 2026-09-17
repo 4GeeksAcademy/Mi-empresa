@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import Link from "next/link";
 import { forgotPassword } from "@/lib/auth";
+import { AuthPageShell } from "@/components/auth-page-shell";
 
 export default function ForgotPasswordPage() {
   const [email, setEmail] = useState("");
@@ -26,8 +27,7 @@ export default function ForgotPasswordPage() {
   }
 
   return (
-    <main className="ops-bg flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+    <AuthPageShell>
         <h1 className="text-2xl font-extrabold text-slate-900">
           ¿Olvidaste tu contraseña?
         </h1>
@@ -82,7 +82,6 @@ export default function ForgotPasswordPage() {
             Volver al inicio de sesión
           </Link>
         </p>
-      </div>
-    </main>
+    </AuthPageShell>
   );
 }

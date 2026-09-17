@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { register, setToken } from "@/lib/auth";
+import { AuthPageShell } from "@/components/auth-page-shell";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -46,8 +47,7 @@ export default function RegisterPage() {
   }
 
   return (
-    <main className="ops-bg flex min-h-screen items-center justify-center">
-      <div className="w-full max-w-sm rounded-2xl border border-slate-200 bg-white p-8 shadow-sm">
+    <AuthPageShell>
         <h1 className="text-2xl font-extrabold text-slate-900">Crear cuenta</h1>
         <p className="mt-1 text-sm text-slate-600">
           Regístrate para acceder al panel operativo.
@@ -154,7 +154,6 @@ export default function RegisterPage() {
             Iniciar sesión
           </Link>
         </p>
-      </div>
-    </main>
+    </AuthPageShell>
   );
 }
