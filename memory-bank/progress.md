@@ -466,3 +466,25 @@
 
 ### Riesgos y deuda tecnica
 - Persisten 35 avisos deprecados de `python-jose` relacionados con `datetime.utcnow()`; no proceden de los cambios de esta tarea.
+
+## 2026-09-17 (Auditoria de rendimiento y mantenibilidad frontend)
+
+### Objetivo de esta ejecucion
+- Auditar Core Web Vitals, SEO y duplicacion en `uis/website` y `uis/backoffice` sin reestructurar la arquitectura.
+
+### Cambios implementados
+- Instalada la skill `.agents/skills/core-web-vitals` desde `addyosmani/web-quality-skills`.
+- Creado `uis/backoffice/components/auth-page-shell.tsx` y aplicado en login, registro y recuperacion de contrasena para centralizar la carcasa visual repetida.
+- Anadido `uis/website/app/robots.ts` para generar una directiva de rastreo valida; se verifico la respuesta HTTP de `/robots.txt`.
+- Creado `AUDIT.md` con baseline, dos casos de duplicacion, causas verificadas, decisiones de no aplicar optimizaciones especulativas y limitaciones de medicion.
+
+### Validaciones ejecutadas
+- `npm run lint` en `uis/backoffice` -> OK.
+- `npm run lint` en `uis/website` -> OK.
+- `npm run build` en `uis/backoffice` -> OK.
+- `npm run build` en `uis/website` -> OK.
+- Rutas locales de produccion `/`, `/apply` y backoffice `/` -> HTTP 200.
+
+### Riesgos y limitaciones
+- Lighthouse posterior queda bloqueado: no hay Chrome del sistema y el Chromium de Playwright no inicia al faltar `libatk-1.0.so.0`. Se conservan las metricas de baseline de `audit/before` y no se reportan mejoras numericas no verificadas.
+- Creado `.env` local desde la plantilla versionada para desbloquear Compose. Backend queda `healthy` y las UIs responden internamente; la publicacion de puertos hacia el host y la red `interfaces -> backend` siguen limitadas por Docker anidado. No se modifico infraestructura protegida.
