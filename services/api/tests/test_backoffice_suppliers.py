@@ -67,7 +67,25 @@ def test_list_suppliers_uses_english_aliases_and_returns_matches(monkeypatch: py
     assert repository.filters.categoria == SupplierCategory.TRANSPORTE
 
 
+def test_list_suppliers_uses_ttl_cache_and_invalidates_after_update(monkeypatch: pytest.MonkeyPatch) -> None:
+    first = _SupplierRepository(_supplier_response())
+    monkeypatch.setattr(suppliers, "get_suppliers_repository", lambda: first)
+    suppliers.suppliers_cache.clear()
+
+    suppliers.list_suppliers(pais=None, categoria=None, country=None, category=None)
+    suppliers.list_suppliers(pais=None, categoria=None, country=None, category=None)
+    assert first.filters is not None
+
+    replacement = _SupplierRepository(_supplier_response(2))
+    monkeypatch.setattr(suppliers, "get_suppliers_repository", lambda: replacement)
+    suppliers.update_supplier_rate(1, SupplierRateUpdateInput(tarifa_por_kg=6.0), {"id": 1})
+    refreshed = suppliers.list_suppliers(pais=None, categoria=None, country=None, category=None)
+    assert refreshed[0].id == 2
+    suppliers.suppliers_cache.clear()
+
+
 def test_supplier_routes_reject_missing_resource_and_wrap_repository_errors(monkeypatch: pytest.MonkeyPatch) -> None:
+    suppliers.suppliers_cache.clear()
     monkeypatch.setattr(suppliers, "get_suppliers_repository", lambda: _SupplierRepository(None))
     with pytest.raises(HTTPException, match="Proveedor no encontrado") as missing:
         suppliers.update_supplier_status(99, SupplierStatusUpdateInput(status=SupplierStatus.SUSPENDIDO), {"id": 1})
