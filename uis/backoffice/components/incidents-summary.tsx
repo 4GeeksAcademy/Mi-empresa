@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 
 interface SummaryData {
   total_incidents: number;
@@ -57,8 +57,13 @@ function SummaryChart({ items, labelMap, colorMap }: {
   labelMap: Record<string, string>;
   colorMap?: Record<string, string>;
 }) {
-  const entries = Object.entries(items);
-  const total = entries.reduce((sum, [, count]) => sum + count, 0);
+  const { entries, total } = useMemo(() => {
+    const nextEntries = Object.entries(items);
+    return {
+      entries: nextEntries,
+      total: nextEntries.reduce((sum, [, count]) => sum + count, 0),
+    };
+  }, [items]);
 
   if (entries.length === 0) {
     return <p className="text-sm text-slate-500">Sin datos</p>;

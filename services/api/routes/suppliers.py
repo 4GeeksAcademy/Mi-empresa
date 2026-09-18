@@ -13,6 +13,7 @@ from models import (
     SupplierResponse,
     SupplierStatusUpdateInput,
 )
+from cache import suppliers_cache
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
@@ -24,7 +25,9 @@ def create_supplier(
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
-        return repo.create(payload)
+        created = repo.create(payload)
+        suppliers_cache.invalidate("suppliers:list:")
+        return created
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -43,9 +46,15 @@ def list_suppliers(
         pais=pais or country,
         categoria=categoria or category,
     )
+    cache_key = f"suppliers:list:{filters.pais or '-'}:{filters.categoria or '-'}"
+    cached = suppliers_cache.get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     repo = get_suppliers_repository()
     try:
-        return repo.list(filters)
+        suppliers = repo.list(filters)
+        suppliers_cache.set(cache_key, suppliers, ttl_seconds=60)
+        return suppliers
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -84,6 +93,7 @@ def update_supplier_rate(
         ) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
+    suppliers_cache.invalidate("suppliers:list:")
     return updated
 
 
@@ -103,6 +113,7 @@ def update_supplier_status(
         ) from exc
     if updated is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
+    suppliers_cache.invalidate("suppliers:list:")
     return updated
 
 
@@ -121,4 +132,5 @@ def delete_supplier(
         ) from exc
     if not deleted:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
+    suppliers_cache.invalidate("suppliers:list:")
     return {"detail": "Proveedor eliminado."}
