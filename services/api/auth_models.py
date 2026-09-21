@@ -13,6 +13,8 @@ class UserRole(str, Enum):
 
 
 class UserCreateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=6, max_length=255)
     role: UserRole = UserRole.USER
@@ -31,6 +33,8 @@ class UserCreateInput(BaseModel):
 
 
 class UserUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: str | None = Field(default=None, min_length=5, max_length=255)
     role: UserRole | None = None
     is_active: bool | None = None
@@ -56,6 +60,17 @@ class UserResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
 
+class RegistrationResponse(BaseModel):
+    """Respuesta mínima del registro público, sin reenviar el email."""
+
+    id: int
+    role: UserRole
+    is_active: bool
+    created_at: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class UserPersistence(BaseModel):
     email: str
     hashed_password: str
@@ -65,6 +80,8 @@ class UserPersistence(BaseModel):
 
 
 class ProfileCreateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     user_id: int
     name: str | None = None
     phone: str | None = None
@@ -72,6 +89,8 @@ class ProfileCreateInput(BaseModel):
 
 
 class ProfileUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     name: str | None = None
     phone: str | None = None
     address: str | None = None
@@ -95,6 +114,8 @@ class ProfilePersistence(BaseModel):
 
 
 class LoginInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: str
     password: str
 
@@ -110,11 +131,15 @@ class AuthMeResponse(BaseModel):
     role: UserRole
     profile: ProfileResponse | None = None
 
+    model_config = ConfigDict(extra="forbid")
+
 
 # ── Modelos para recuperación y cambio de contraseña ──────────────────
 
 
 class ForgotPasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     email: str = Field(min_length=5, max_length=255)
 
     @field_validator("email")
@@ -127,17 +152,23 @@ class ForgotPasswordInput(BaseModel):
 
 
 class ResetPasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     token: str = Field(min_length=1, max_length=255)
     new_password: str = Field(min_length=6, max_length=255)
 
 
 class ChangePasswordInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     current_password: str = Field(min_length=1, max_length=255)
     new_password: str = Field(min_length=6, max_length=255)
 
 
 class MessageResponse(BaseModel):
     message: str
+
+    model_config = ConfigDict(extra="forbid")
 
 
 def utc_now_iso() -> str:

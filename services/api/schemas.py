@@ -45,4 +45,3 @@ class InventoryOrderResponse(BaseModel):
     quantity: int
     direction: str
     created_at: datetime
-    user_uuid: str

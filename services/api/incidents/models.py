@@ -180,6 +180,14 @@ class IncidentResponse(BaseModel):
     updated_at: str
 
 
+class IncidentSummaryResponse(BaseModel):
+    total_incidents: int
+    by_status: dict[str, int]
+    by_category: dict[str, int]
+    by_origin: dict[str, int]
+    by_branch: dict[str, int]
+
+
 class IncidentPersistence(BaseModel):
     """Modelo interno para persistencia en TinyDB (sin id, que usa doc_id)."""
     title: str

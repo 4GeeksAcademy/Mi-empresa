@@ -47,10 +47,14 @@ class SupplierCreateInput(SupplierBase):
 
 
 class SupplierRateUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     tarifa_por_kg: float = Field(gt=0)
 
 
 class SupplierStatusUpdateInput(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     status: SupplierStatus
 
 

@@ -6,6 +6,7 @@ from auth import get_current_user, hash_password
 from auth_db import get_user_repository, get_profile_repository
 from auth_models import (
     UserCreateInput,
+    RegistrationResponse,
     UserResponse,
     UserUpdateInput,
     UserPersistence,
@@ -18,8 +19,8 @@ from auth_models import (
 router = APIRouter(prefix="/users", tags=["users"])
 
 
-@router.post("", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
-def create_user(payload: UserCreateInput) -> UserResponse:
+@router.post("", response_model=RegistrationResponse, status_code=status.HTTP_201_CREATED)
+def create_user(payload: UserCreateInput) -> RegistrationResponse:
     """Registrar un nuevo usuario (público)."""
     repo = get_user_repository()
 
@@ -52,7 +53,7 @@ def create_user(payload: UserCreateInput) -> UserResponse:
         )
         profile_repo.create(profile_payload)
 
-    return created
+    return RegistrationResponse.model_validate(created)
 
 
 @router.get("", response_model=list[UserResponse])
@@ -146,7 +147,7 @@ def update_user(
     return updated
 
 
-@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{user_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
 def delete_user(
     user_id: int,
     current_user: dict = Depends(get_current_user),

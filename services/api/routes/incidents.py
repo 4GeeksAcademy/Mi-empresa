@@ -6,6 +6,7 @@ from incidents.models import (
     IncidentCreate,
     IncidentFilters,
     IncidentResponse,
+    IncidentSummaryResponse,
     IncidentStatusUpdate,
 )
 from incidents.repository import get_incidents_repository
@@ -69,8 +70,8 @@ def list_incidents(
     return incidents
 
 
-@router.get("/summary")
-def get_summary() -> dict:
+@router.get("/summary", response_model=IncidentSummaryResponse)
+def get_summary() -> IncidentSummaryResponse:
     """Devuelve metricas agregadas de incidencias."""
     repo = get_incidents_repository()
     cached = incidents_cache.get("incidents:summary")
@@ -85,7 +86,7 @@ def get_summary() -> dict:
         ) from exc
 
     incidents_cache.set("incidents:summary", summary, ttl_seconds=30)
-    return summary
+    return IncidentSummaryResponse.model_validate(summary)
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)

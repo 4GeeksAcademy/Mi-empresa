@@ -21,6 +21,7 @@ from routes.inventory import router as inventory_router
 from routes.profiles import router as profiles_router
 from routes.suppliers import router as suppliers_router
 from routes.users import router as users_router
+from pydantic import BaseModel, ConfigDict
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger("trackflow_api")
@@ -78,16 +79,29 @@ app.include_router(inventory_router)
 _last_export_csv_bytes: bytes | None = None
 
 
-@app.get("/health")
-def health() -> dict[str, str]:
-    return {"status": "ok"}
+class HealthResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    status: str
 
 
-@app.post("/api/incidents/analyze")
+class IncidentAnalysisResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    filename: str
+    summary: dict[str, object]
+
+
+@app.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    return HealthResponse(status="ok")
+
+
+@app.post("/api/incidents/analyze", response_model=IncidentAnalysisResponse)
 async def analyze_incidents(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-) -> dict[str, Any]:
+) -> IncidentAnalysisResponse:
     global _last_export_csv_bytes
 
     if not file.filename:
@@ -123,13 +137,13 @@ async def analyze_incidents(
 
     _last_export_csv_bytes = buffer.getvalue().encode("utf-8")
 
-    return {
-        "filename": file.filename,
-        "summary": result.to_json(),
-    }
+    return IncidentAnalysisResponse(
+        filename=file.filename,
+        summary=result.to_json(),
+    )
 
 
-@app.get("/api/incidents/results/export")
+@app.get("/api/incidents/results/export", response_model=None)
 def export_last_result(
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
