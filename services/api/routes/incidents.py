@@ -20,14 +20,15 @@ def create_incident(payload: IncidentCreate) -> IncidentResponse:
     repo = get_incidents_repository()
     try:
         created = repo.create(payload)
-        incidents_cache.invalidate("incidents:summary")
-        incidents_cache.invalidate("incidents:list:")
-        return created
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al crear la incidencia. Intentalo de nuevo mas tarde.",
         ) from exc
+
+    incidents_cache.invalidate("incidents:summary")
+    incidents_cache.invalidate("incidents:list:")
+    return created
 
 
 @router.get("", response_model=list[IncidentResponse])
@@ -58,13 +59,14 @@ def list_incidents(
         return cached  # type: ignore[return-value]
     try:
         incidents = repo.list(filters)
-        incidents_cache.set(cache_key, incidents, ttl_seconds=30)
-        return incidents
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al listar las incidencias. Intentalo de nuevo mas tarde.",
         ) from exc
+
+    incidents_cache.set(cache_key, incidents, ttl_seconds=30)
+    return incidents
 
 
 @router.get("/summary")
@@ -76,13 +78,14 @@ def get_summary() -> dict:
         return cached  # type: ignore[return-value]
     try:
         summary = repo.get_summary()
-        incidents_cache.set("incidents:summary", summary, ttl_seconds=30)
-        return summary
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al obtener el resumen. Intentalo de nuevo mas tarde.",
         ) from exc
+
+    incidents_cache.set("incidents:summary", summary, ttl_seconds=30)
+    return summary
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
