@@ -9,6 +9,7 @@ from incidents.models import (
     IncidentStatusUpdate,
 )
 from incidents.repository import get_incidents_repository
+from cache import incidents_cache
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -18,12 +19,16 @@ def create_incident(payload: IncidentCreate) -> IncidentResponse:
     """Crea una nueva incidencia."""
     repo = get_incidents_repository()
     try:
-        return repo.create(payload)
+        created = repo.create(payload)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al crear la incidencia. Intentalo de nuevo mas tarde.",
         ) from exc
+
+    incidents_cache.invalidate("incidents:summary")
+    incidents_cache.invalidate("incidents:list:")
+    return created
 
 
 @router.get("", response_model=list[IncidentResponse])
@@ -48,26 +53,39 @@ def list_incidents(
         ) from exc
 
     repo = get_incidents_repository()
+    cache_key = f"incidents:list:{status_param or '-'}:{origin or '-'}:{branch or '-'}:{category or '-'}"
+    cached = incidents_cache.get(cache_key)
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     try:
-        return repo.list(filters)
+        incidents = repo.list(filters)
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al listar las incidencias. Intentalo de nuevo mas tarde.",
         ) from exc
 
+    incidents_cache.set(cache_key, incidents, ttl_seconds=30)
+    return incidents
+
 
 @router.get("/summary")
 def get_summary() -> dict:
     """Devuelve metricas agregadas de incidencias."""
     repo = get_incidents_repository()
+    cached = incidents_cache.get("incidents:summary")
+    if cached is not None:
+        return cached  # type: ignore[return-value]
     try:
-        return repo.get_summary()
+        summary = repo.get_summary()
     except Exception as exc:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Error interno al obtener el resumen. Intentalo de nuevo mas tarde.",
         ) from exc
+
+    incidents_cache.set("incidents:summary", summary, ttl_seconds=30)
+    return summary
 
 
 @router.get("/{incident_id}", response_model=IncidentResponse)
@@ -110,4 +128,6 @@ def update_incident_status(
             detail=f"No se encontro la incidencia con ID {incident_id}.",
         )
 
+    incidents_cache.invalidate("incidents:summary")
+    incidents_cache.invalidate("incidents:list:")
     return updated

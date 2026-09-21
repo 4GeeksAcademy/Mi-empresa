@@ -3,6 +3,7 @@ from __future__ import annotations
 import csv
 import io
 import logging
+import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
 from typing import Any
@@ -32,6 +33,22 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)
+
+
+@app.middleware("http")
+async def timing_middleware(request: Request, call_next):
+    started = time.perf_counter()
+    response = await call_next(request)
+    duration_ms = (time.perf_counter() - started) * 1000
+    logger.info(
+        "%s %s %s | %.1fms",
+        request.method,
+        request.url.path,
+        response.status_code,
+        duration_ms,
+    )
+    response.headers["X-Response-Time-Ms"] = f"{duration_ms:.1f}"
+    return response
 
 @app.exception_handler(Exception)
 async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:

@@ -1,4 +1,11 @@
-import { IncidentsAnalyzer } from "@/components/incidents-analyzer";
+import dynamic from "next/dynamic";
+
+const IncidentsAnalyzer = dynamic(
+  () => import("@/components/incidents-analyzer").then((module) => module.IncidentsAnalyzer),
+  {
+    loading: () => <p className="rounded-2xl bg-white p-6 text-sm text-slate-500">Cargando analizador...</p>,
+  },
+);
 
 export default function IncidentsAnalysisPage() {
   return (
