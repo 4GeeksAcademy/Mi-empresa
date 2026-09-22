@@ -488,3 +488,40 @@
 ### Riesgos y limitaciones
 - Lighthouse posterior queda bloqueado: no hay Chrome del sistema y el Chromium de Playwright no inicia al faltar `libatk-1.0.so.0`. Se conservan las metricas de baseline de `audit/before` y no se reportan mejoras numericas no verificadas.
 - Creado `.env` local desde la plantilla versionada para desbloquear Compose. Backend queda `healthy` y las UIs responden internamente; la publicacion de puertos hacia el host y la red `interfaces -> backend` siguen limitadas por Docker anidado. No se modifico infraestructura protegida.
+
+## 2026-09-22 (Plan de telemetría)
+
+### Objetivo
+- Diseñar el catálogo de telemetría de TrackFlow antes de implementar instrumentación.
+
+### Cambios realizados
+- Creado `docs/telemetry/telemetry-plan.md` con contexto, envelope, 24 eventos, hipótesis, decisiones, clasificación, stream/batch, allowlists, privacidad, throttling, retención, riesgos y exclusiones.
+- Creado `docs/telemetry/event-schemas.json` con catálogo personalizado `trackflow-telemetry-catalog-v1`, envelope requerido y propiedades allowlisted por evento.
+
+### Validaciones
+- `python -m json.tool docs/telemetry/event-schemas.json` -> OK.
+- Validación personalizada -> 24 eventos únicos, 7 categorías, referencias Markdown y allowlists alineadas.
+- `get_errors` sobre ambos entregables -> sin errores.
+- `git diff --check` -> OK.
+
+### Decisiones y límites
+- No se implementó código de instrumentación.
+- Los eventos de envíos, transportistas y devoluciones no implementados se dejaron como exclusiones/backlog para evitar contratos inventados.
+- No se modificaron `CONTEXT.md` ni `company-choice.md`.
+
+## 2026-09-22 (Corrección de evaluación del plan de telemetría)
+
+### Cambios realizados
+- Alineado `event-schemas.json` con las hipótesis y decisiones específicas de `telemetry-plan.md` para los 24 eventos.
+- Mejoradas las descripciones de propiedades, sanitización y sensibilidad.
+- Añadidos productor, capa de origen y momento exacto de emisión por evento.
+- Añadida justificación operativa y objetivo de latencia dentro de `delivery_strategy`.
+- Añadido contrato mínimo de implementación en `telemetry-plan.md` para validar envelope, allowlist, required, deduplicación y propagación de `requestId`.
+
+### Validaciones
+- JSON válido con `python -m json.tool`.
+- 24 eventos únicos, 7 categorías y ocho campos del envelope verificados.
+- Allowlists sincronizadas exactamente con las propiedades.
+- Hipótesis, decisiones, PII, throttling, productor y momento de emisión presentes en todos los eventos.
+- `get_errors` sin errores.
+- `git diff --check` correcto.

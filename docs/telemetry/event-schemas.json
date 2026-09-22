@@ -1,0 +1,1313 @@
+{
+  "title": "TrackFlow Telemetry Event Catalog",
+  "description": "Custom catalog validated by the rules in telemetry-plan.md. Every emitted event must satisfy the envelope and the event-specific allowlist.",
+  "format": "trackflow-telemetry-catalog-v1",
+  "envelope": {
+    "required": [
+      "eventId",
+      "timestamp",
+      "sessionId",
+      "userId",
+      "event_type",
+      "schemaVersion",
+      "requestId",
+      "properties"
+    ],
+    "properties": {
+      "eventId": {
+        "type": "string",
+        "format": "uuid"
+      },
+      "timestamp": {
+        "type": "string",
+        "format": "date-time",
+        "description": "ISO 8601 UTC"
+      },
+      "sessionId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "userId": {
+        "type": [
+          "string",
+          "null"
+        ]
+      },
+      "event_type": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9]*(?:_[a-z0-9]+)+$"
+      },
+      "schemaVersion": {
+        "type": "string",
+        "pattern": "^[0-9]+\\.[0-9]+$"
+      },
+      "requestId": {
+        "type": "string",
+        "minLength": 1
+      },
+      "properties": {
+        "type": "object",
+        "additionalProperties": false
+      }
+    }
+  },
+  "validation_rules": [
+    "Validate each emitted envelope against envelope.required and envelope.properties.",
+    "event_type must exist exactly once in events.",
+    "properties names must be a subset of the event allowlist and required names must be present.",
+    "Reject unknown envelope fields and unknown event properties.",
+    "Each event includes a concrete producer, emission moment, delivery mode and business justification."
+  ],
+  "events": [
+    {
+      "event_type": "inbound_order_created",
+      "description": "Entrada de stock confirmada mediante InboundOrder.",
+      "category": "inventory",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "La conciliación y trazabilidad de stock requieren disponibilidad inmediata.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Las entradas diarias reflejan reposición real",
+      "decision": "Operaciones concilia recepción y stock",
+      "properties": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "required": true,
+          "description": "Identificador de la orden de inventario",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "description": "SKU del producto",
+          "sensitive": false,
+          "sanitization": "trim_and_normalize"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "required": true,
+          "description": "Unidades de la operación",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "order_id",
+        "product_id",
+        "sku",
+        "warehouse",
+        "quantity"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after database commit succeeds",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "outbound_order_created",
+      "description": "Salida de stock confirmada mediante OutboundOrder.",
+      "category": "inventory",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "El volumen de salidas debe estar disponible rápidamente para planificar picking y transporte.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "El volumen de salidas y su distribución por almacén cambia la capacidad",
+      "decision": "Se planifica picking y transporte",
+      "properties": [
+        {
+          "name": "order_id",
+          "type": "integer",
+          "required": true,
+          "description": "Identificador de la orden de inventario",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "description": "SKU del producto",
+          "sensitive": false,
+          "sanitization": "trim_and_normalize"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "quantity",
+          "type": "integer",
+          "required": true,
+          "description": "Unidades de la operación",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "order_id",
+        "product_id",
+        "sku",
+        "warehouse",
+        "quantity"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after database commit succeeds",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "direct_stock_edit_rejected",
+      "description": "Intento de modificar stock fuera de una orden autorizada.",
+      "category": "inventory",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Un intento de eludir la trazabilidad puede requerir investigación de seguridad inmediata.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Alguien intenta saltarse la trazabilidad",
+      "decision": "Seguridad corrige permisos y operaciones investiga",
+      "properties": [
+        {
+          "name": "resource",
+          "type": "string",
+          "required": true,
+          "description": "Recurso cuya modificación fue rechazada",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": true,
+          "description": "Código controlado del motivo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "http_status",
+          "type": "integer",
+          "required": true,
+          "description": "Código de estado HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "resource",
+        "reason_code",
+        "warehouse",
+        "http_status"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when authorization or route policy rejects the request",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "inventory_validation_failed",
+      "description": "Validación de una operación de inventario fallida.",
+      "category": "inventory",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Productos/SKU generan errores repetidos",
+      "decision": "Se corrigen datos y UX",
+      "properties": [
+        {
+          "name": "operation",
+          "type": "string",
+          "required": true,
+          "description": "Operación lógica de la integración",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": true,
+          "description": "Código controlado del motivo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "operation",
+        "reason_code",
+        "product_id",
+        "warehouse"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when validation returns a controlled rejection",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "stock_threshold_triggered",
+      "description": "Producto por debajo del umbral mínimo configurado.",
+      "category": "inventory",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Compras y operaciones deben reaccionar antes de una ruptura de stock.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Un producto cae bajo el umbral",
+      "decision": "Compras y operaciones reponen antes de una ruptura",
+      "properties": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "description": "SKU del producto",
+          "sensitive": false,
+          "sanitization": "trim_and_normalize"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "current_stock",
+          "type": "integer",
+          "required": true,
+          "description": "Stock calculado actual",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        },
+        {
+          "name": "threshold",
+          "type": "integer",
+          "required": true,
+          "description": "Umbral mínimo configurado",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "product_id",
+        "sku",
+        "warehouse",
+        "current_stock",
+        "threshold"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "on transition from at/above threshold to below threshold",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "inventory_product_viewed",
+      "description": "Consulta de un producto de inventario.",
+      "category": "inventory",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "La demanda de consulta concentra ciertos SKU/almacenes",
+      "decision": "Se priorizan vistas y reposición",
+      "properties": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "source",
+          "type": "string",
+          "required": true,
+          "description": "Origen de la consulta",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "product_id",
+        "warehouse",
+        "source"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "frontend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "frontend"
+    },
+    {
+      "event_type": "outbound_order_rejected",
+      "description": "Salida rechazada por stock insuficiente o producto inexistente.",
+      "category": "inventory",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "El operador necesita resolver el bloqueo de salida durante el flujo activo.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "El stock insuficiente bloquea salidas",
+      "decision": "Se reasigna inventario o se alerta al operador",
+      "properties": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": true,
+          "description": "Código controlado del motivo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "requested_quantity",
+          "type": "integer",
+          "required": true,
+          "description": "Unidades solicitadas",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        },
+        {
+          "name": "available_quantity",
+          "type": "integer",
+          "required": false,
+          "description": "Unidades disponibles al rechazar",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "product_id",
+        "reason_code",
+        "requested_quantity",
+        "available_quantity"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "product_created",
+      "description": "Producto creado en una partición de almacén.",
+      "category": "inventory",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Se crean particiones de SKU de forma coherente",
+      "decision": "Se audita el catálogo",
+      "properties": [
+        {
+          "name": "product_id",
+          "type": "integer",
+          "required": false,
+          "description": "Identificador del producto",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "sku",
+          "type": "string",
+          "required": true,
+          "description": "SKU del producto",
+          "sensitive": false,
+          "sanitization": "trim_and_normalize"
+        },
+        {
+          "name": "warehouse",
+          "type": "string",
+          "required": false,
+          "description": "Almacén de la operación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "product_id",
+        "sku",
+        "warehouse"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "login_succeeded",
+      "description": "Autenticación correcta de un usuario activo.",
+      "category": "authentication",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "La adopción y distribución de accesos es conocida",
+      "decision": "Se dimensionan sesiones y soporte",
+      "properties": [
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "description": "Rol del usuario",
+          "sensitive": true,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "auth_method",
+          "type": "string",
+          "required": true,
+          "description": "Método de autenticación",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "role",
+        "auth_method"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after credentials and active status are verified",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "login_failed",
+      "description": "Intento de login rechazado.",
+      "category": "authentication",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Un pico de fallos puede indicar abuso o impedir el acceso de operadores.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Aumentan fallos de credenciales",
+      "decision": "Seguridad activa protección; nunca se registra la contraseña",
+      "properties": [
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": true,
+          "description": "Código controlado del motivo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "role",
+          "type": "string",
+          "required": false,
+          "description": "Rol del usuario",
+          "sensitive": true,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "reason_code",
+        "role"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after credentials or account status is rejected",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "session_expired",
+      "description": "Sesión expirada, revocada o inactiva.",
+      "category": "authentication",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Expiraciones interrumpen operaciones",
+      "decision": "Se ajusta UX o expiración segura",
+      "properties": [
+        {
+          "name": "reason_code",
+          "type": "string",
+          "required": true,
+          "description": "Código controlado del motivo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        }
+      ],
+      "allowlist": [
+        "reason_code",
+        "route"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when an expired/revoked session is rejected",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "unauthorized_access_rejected",
+      "description": "Solicitud autenticada rechazada por falta de autorización.",
+      "category": "authentication",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Los accesos no autorizados requieren investigación rápida.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Hay intentos de acceso a recursos no permitidos",
+      "decision": "Se investigan permisos o abuso",
+      "properties": [
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        },
+        {
+          "name": "http_status",
+          "type": "integer",
+          "required": true,
+          "description": "Código de estado HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "required_role",
+          "type": "string",
+          "required": false,
+          "description": "Rol requerido para el recurso",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "route",
+        "http_status",
+        "required_role"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when an authenticated request fails authorization",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "password_reset_requested",
+      "description": "Solicitud de recuperación de contraseña registrada sin revelar si el email existe.",
+      "category": "authentication",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Se acumulan recuperaciones",
+      "decision": "Se mejora acceso y soporte sin revelar existencia de usuario",
+      "properties": [
+        {
+          "name": "result",
+          "type": "string",
+          "required": true,
+          "description": "Resultado uniforme para evitar enumeración",
+          "sensitive": false,
+          "sanitization": "none"
+        }
+      ],
+      "allowlist": [
+        "result"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after the privacy-preserving request response is created",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "backoffice_section_viewed",
+      "description": "Sección del backoffice visualizada.",
+      "category": "navigation",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Algunas secciones son más usadas",
+      "decision": "Se priorizan mejoras",
+      "properties": [
+        {
+          "name": "section",
+          "type": "string",
+          "required": true,
+          "description": "Sección del backoffice",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        }
+      ],
+      "allowlist": [
+        "section",
+        "route"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "frontend",
+      "emit_when": "after the section becomes visible",
+      "source_layer": "frontend"
+    },
+    {
+      "event_type": "workflow_abandoned",
+      "description": "Flujo iniciado que no alcanza su evento de finalización dentro del timeout.",
+      "category": "navigation",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Un flujo iniciado no termina",
+      "decision": "Se elimina fricción o se contacta al equipo",
+      "properties": [
+        {
+          "name": "workflow",
+          "type": "string",
+          "required": true,
+          "description": "Flujo controlado",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "last_step",
+          "type": "string",
+          "required": true,
+          "description": "Último paso controlado completado",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Duración medida en milisegundos",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "workflow",
+        "last_step",
+        "duration_ms"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "frontend",
+      "emit_when": "after the abandonment timeout expires",
+      "source_layer": "frontend"
+    },
+    {
+      "event_type": "search_executed",
+      "description": "Búsqueda o filtrado ejecutado en el backoffice.",
+      "category": "navigation",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Las búsquedas muestran necesidades de descubrimiento",
+      "decision": "Se mejoran filtros e índices",
+      "properties": [
+        {
+          "name": "section",
+          "type": "string",
+          "required": true,
+          "description": "Sección del backoffice",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "filter_type",
+          "type": "string",
+          "required": true,
+          "description": "Tipo controlado de filtro",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "result_count",
+          "type": "integer",
+          "required": true,
+          "description": "Número de resultados",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "section",
+        "filter_type",
+        "result_count"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "frontend",
+      "emit_when": "after debounce and search execution",
+      "source_layer": "frontend"
+    },
+    {
+      "event_type": "api_latency_recorded",
+      "description": "Latencia de un endpoint HTTP observada al finalizar la respuesta.",
+      "category": "performance",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "La latencia se degrada por ruta/almacén",
+      "decision": "Se optimiza antes de afectar operaciones",
+      "properties": [
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "required": true,
+          "description": "Método HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "duration_ms",
+          "type": "integer",
+          "required": false,
+          "description": "Duración medida en milisegundos",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        },
+        {
+          "name": "status_code",
+          "type": "integer",
+          "required": true,
+          "description": "Código de respuesta HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "route",
+        "method",
+        "duration_ms",
+        "status_code"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "after the HTTP response is completed",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "api_error_recorded",
+      "description": "Error HTTP monitorizado en una ruta de la API.",
+      "category": "errors",
+      "classification": "mandatory",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Los errores de API pueden bloquear la operación y requieren respuesta rápida.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Suben 4xx/5xx",
+      "decision": "Se prioriza respuesta y corrección",
+      "properties": [
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        },
+        {
+          "name": "method",
+          "type": "string",
+          "required": true,
+          "description": "Método HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "status_code",
+          "type": "integer",
+          "required": true,
+          "description": "Código de respuesta HTTP",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "error_code",
+          "type": "string",
+          "required": true,
+          "description": "Código normalizado de error",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "route",
+        "method",
+        "status_code",
+        "error_code"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when a request returns a tracked 4xx/5xx",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "frontend_error_captured",
+      "description": "Error JavaScript no controlado capturado en el frontend.",
+      "category": "errors",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "Un error de interfaz puede bloquear al operador aunque la API siga disponible.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Errores JS rompen flujos aunque la API esté sana",
+      "decision": "Se corrige la interfaz",
+      "properties": [
+        {
+          "name": "route",
+          "type": "string",
+          "required": false,
+          "description": "Ruta normalizada sin query string",
+          "sensitive": false,
+          "sanitization": "remove_query_string"
+        },
+        {
+          "name": "error_code",
+          "type": "string",
+          "required": true,
+          "description": "Código normalizado de error",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "release",
+          "type": "string",
+          "required": true,
+          "description": "Versión publicada del frontend",
+          "sensitive": false,
+          "sanitization": "none"
+        }
+      ],
+      "allowlist": [
+        "route",
+        "error_code",
+        "release"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "frontend",
+      "emit_when": "when the global frontend error boundary receives an error",
+      "source_layer": "frontend"
+    },
+    {
+      "event_type": "integration_call_failed",
+      "description": "Llamada a una integración logística fallida.",
+      "category": "performance",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "stream",
+        "justification": "La caída de una dependencia puede detener un proceso logístico.",
+        "latency_target": "<=60s"
+      },
+      "hypothesis": "Una dependencia logística falla",
+      "decision": "Se activa fallback o escalado",
+      "properties": [
+        {
+          "name": "integration",
+          "type": "string",
+          "required": true,
+          "description": "Integración lógica",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "operation",
+          "type": "string",
+          "required": true,
+          "description": "Operación lógica de la integración",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "error_code",
+          "type": "string",
+          "required": true,
+          "description": "Código normalizado de error",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "retry_count",
+          "type": "integer",
+          "required": true,
+          "description": "Número de reintentos",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "integration",
+        "operation",
+        "error_code",
+        "retry_count"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "incident_created",
+      "description": "Incidencia creada con categoría, origen y sede controlados.",
+      "category": "incidents",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Categorías/orígenes muestran problemas operativos recurrentes",
+      "decision": "Se asignan responsables",
+      "properties": [
+        {
+          "name": "incident_id",
+          "type": "integer",
+          "required": true,
+          "description": "Identificador de la incidencia",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "category",
+          "type": "string",
+          "required": true,
+          "description": "Categoría controlada",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "origin",
+          "type": "string",
+          "required": true,
+          "description": "Origen controlado",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "branch",
+          "type": "string",
+          "required": true,
+          "description": "Sede controlada",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "incident_id",
+        "category",
+        "origin",
+        "branch"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "incident_status_changed",
+      "description": "Transición de estado de una incidencia.",
+      "category": "incidents",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Incidencias se estancan en un estado",
+      "decision": "Se revisan SLA y carga",
+      "properties": [
+        {
+          "name": "incident_id",
+          "type": "integer",
+          "required": true,
+          "description": "Identificador de la incidencia",
+          "sensitive": false,
+          "sanitization": "none"
+        },
+        {
+          "name": "from_status",
+          "type": "string",
+          "required": true,
+          "description": "Estado anterior",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "to_status",
+          "type": "string",
+          "required": true,
+          "description": "Estado nuevo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "incident_id",
+        "from_status",
+        "to_status"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "supplier_status_changed",
+      "description": "Cambio de estado de un proveedor.",
+      "category": "suppliers",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Proveedores suspendidos afectan capacidad",
+      "decision": "Compras busca alternativa",
+      "properties": [
+        {
+          "name": "supplier_id",
+          "type": "integer",
+          "required": true,
+          "description": "Identificador del proveedor",
+          "sensitive": true,
+          "sanitization": "none"
+        },
+        {
+          "name": "from_status",
+          "type": "string",
+          "required": true,
+          "description": "Estado anterior",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "to_status",
+          "type": "string",
+          "required": true,
+          "description": "Estado nuevo",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "country",
+          "type": "string",
+          "required": true,
+          "description": "País del proveedor",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        }
+      ],
+      "allowlist": [
+        "supplier_id",
+        "from_status",
+        "to_status",
+        "country"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    },
+    {
+      "event_type": "report_exported",
+      "description": "Informe de incidencias exportado.",
+      "category": "incidents",
+      "classification": "opportunity",
+      "delivery_strategy": {
+        "mode": "batch",
+        "justification": "La información se consume como tendencia o agregado; no requiere una decisión segundo a segundo.",
+        "latency_target": "15min aggregate / daily reporting"
+      },
+      "hypothesis": "Los informes se exportan con frecuencia",
+      "decision": "Se automatiza la distribución",
+      "properties": [
+        {
+          "name": "report_type",
+          "type": "string",
+          "required": true,
+          "description": "Tipo de informe",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "format",
+          "type": "string",
+          "required": true,
+          "description": "Formato del informe",
+          "sensitive": false,
+          "sanitization": "controlled_allowlist"
+        },
+        {
+          "name": "row_count",
+          "type": "integer",
+          "required": false,
+          "description": "Número de filas exportadas",
+          "sensitive": false,
+          "sanitization": "numeric_range"
+        }
+      ],
+      "allowlist": [
+        "report_type",
+        "format",
+        "row_count"
+      ],
+      "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
+      "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
+      "producer": "backend",
+      "emit_when": "when the corresponding business operation completes or fails",
+      "source_layer": "backend"
+    }
+  ]
+}
