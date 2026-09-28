@@ -13,9 +13,16 @@ from models import (
     SupplierResponse,
     SupplierStatusUpdateInput,
 )
+from pydantic import BaseModel, ConfigDict
 from cache import suppliers_cache
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
+
+
+class SupplierDeleteResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    detail: str
 
 
 @router.post("", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
@@ -117,11 +124,11 @@ def update_supplier_status(
     return updated
 
 
-@router.delete("/{supplier_id}")
+@router.delete("/{supplier_id}", response_model=SupplierDeleteResponse)
 def delete_supplier(
     supplier_id: int,
     current_user: dict = Depends(get_current_user),
-) -> dict[str, str]:
+) -> SupplierDeleteResponse:
     repo = get_suppliers_repository()
     try:
         deleted = repo.delete(supplier_id)
@@ -133,4 +140,4 @@ def delete_supplier(
     if not deleted:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     suppliers_cache.invalidate("suppliers:list:")
-    return {"detail": "Proveedor eliminado."}
+    return SupplierDeleteResponse(detail="Proveedor eliminado.")

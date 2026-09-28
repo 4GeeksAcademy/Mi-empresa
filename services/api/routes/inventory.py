@@ -140,7 +140,6 @@ def create_inbound_order(
         quantity=order.quantity,
         direction="inbound",
         created_at=order.created_at,
-        user_uuid=order.user_uuid,
     )
 
 
@@ -181,7 +180,6 @@ def create_outbound_order(
         quantity=order.quantity,
         direction="outbound",
         created_at=order.created_at,
-        user_uuid=order.user_uuid,
     )
 
 
@@ -199,7 +197,6 @@ def list_orders(db: Session = Depends(get_db)) -> list[InventoryOrderResponse]:
             quantity=order.quantity,
             direction="inbound",
             created_at=order.created_at,
-            user_uuid=order.user_uuid,
         )
         for order, product in inbound_rows
     ] + [
@@ -211,7 +208,6 @@ def list_orders(db: Session = Depends(get_db)) -> list[InventoryOrderResponse]:
             quantity=order.quantity,
             direction="outbound",
             created_at=order.created_at,
-            user_uuid=order.user_uuid,
         )
         for order, product in outbound_rows
     ]

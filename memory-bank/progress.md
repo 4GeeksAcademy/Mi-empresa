@@ -467,6 +467,39 @@
 ### Riesgos y deuda tecnica
 - Persisten 35 avisos deprecados de `python-jose` relacionados con `datetime.utcnow()`; no proceden de los cambios de esta tarea.
 
+## 2026-09-21 (Auditoria de serializacion del backend)
+
+### Correccion posterior
+- Creado `RegistrationResponse` para el registro público, excluyendo expresamente el email de la respuesta.
+- Actualizado `POST /users` para declarar y devolver `RegistrationResponse`.
+- Adaptado el test de registro para verificar que la respuesta no contiene `email` ni `hashed_password`.
+- Actualizado `docs/serialization-audit.md` para marcar el registro como corregido y documentar su proyección mínima.
+- Verificado el esquema publicado en OpenAPI: `RegistrationResponse` solo contiene `id`, `role`, `is_active` y `created_at`.
+
+### Objetivo
+- Auditar todos los endpoints FastAPI y garantizar contratos de respuesta explicitos sin exponer campos internos o sensibles.
+
+### Cambios implementados
+- Creado `docs/serialization-audit.md` con el inventario completo de endpoints, estado inicial/final, payload objetivo, decisiones de relaciones y evidencias.
+- Anadidos `IncidentSummaryResponse`, `HealthResponse` e `IncidentAnalysisResponse` para tipar respuestas que antes eran diccionarios sin modelo explicito.
+- Anadido `SupplierDeleteResponse` para la confirmacion de borrado.
+- Reforzados los esquemas de entrada de auth, usuarios, perfiles y proveedores con `extra="forbid"`.
+- Eliminado `user_uuid` de `InventoryOrderResponse`, ya que era un identificador interno no consumido por la UI.
+- Mantenidos los modelos de respuesta seguros de usuarios, perfiles y autenticacion, sin `hashed_password`, contrasenas ni tokens de recuperacion.
+
+### Validaciones
+- `SECRET_KEY=test-secret-key-for-serialization python -m pytest -q` -> **62 passed**.
+- `docker compose up -d` -> backend saludable e interfaces iniciadas.
+- `GET /health` -> HTTP 200.
+- `GET /api/incidents/summary` -> HTTP 200 con esquema agregado esperado.
+- `GET /suppliers` -> HTTP 200.
+- `GET /openapi.json` -> HTTP 200; endpoints JSON con contratos publicados y respuestas CSV/204 documentadas como excepciones sin cuerpo JSON.
+- Escaneo manual de tres respuestas -> sin `hashed_password`, `password`, `access_token` ni `user_uuid`.
+
+### Riesgos y deuda tecnica
+- Persisten avisos deprecados externos de `python-jose` relacionados con `datetime.utcnow()`.
+- Los endpoints de descarga CSV y borrado HTTP 204 no tienen payload JSON por diseño; la decisión está documentada en la auditoría.
+
 ## 2026-09-17 (Auditoria de rendimiento y mantenibilidad frontend)
 
 ### Objetivo de esta ejecucion

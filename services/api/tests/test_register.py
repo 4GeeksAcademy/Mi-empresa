@@ -37,9 +37,11 @@ def test_create_user_hashes_password_and_creates_optional_profile(
         )
     )
 
+    assert "email" not in created.model_dump()
+    assert "hashed_password" not in created.model_dump()
     raw_user = get_user_repository().get_raw(created.id)
     profile = get_profile_repository().get_by_user_id(created.id)
-    assert created.email == "register@trackflow.com"
+    assert get_user_repository().get(created.id).email == "register@trackflow.com"
     assert raw_user is not None
     assert raw_user["hashed_password"] == "hashed:secure123"
     assert profile is not None
