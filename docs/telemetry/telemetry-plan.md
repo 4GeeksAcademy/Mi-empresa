@@ -85,7 +85,7 @@ La frase justificativa de cada evento se expresa en las columnas **Hipótesis �
 
 El archivo JSON es la fuente normativa de tipos, propiedades, productor y momento de emisión. Para evitar ambigüedad, estas son las reglas comunes: `warehouse` solo `los_angeles|zaragoza`; `direction` solo `inbound|outbound`; `role` solo `admin|manager|user`; IDs y SKU son identificadores técnicos, no texto libre; `error_code` es una clase controlada; `route` es una ruta normalizada sin query string. En cada entrada del JSON, `properties` y `allowlist` deben contener exactamente los mismos nombres.
 
-Las métricas obligatorias son `inbound_order_created`, `outbound_order_created`, `inventory_validation_failed`, `direct_stock_edit_rejected`, `stock_threshold_triggered`, `login_failed`, `backoffice_section_viewed`, `workflow_abandoned`, `api_latency_recorded` y `api_error_recorded`. El resto del catálogo está marcado como oportunidad.
+Los 12 eventos obligatorios son `inbound_order_created`, `outbound_order_created`, `inventory_validation_failed`, `direct_stock_edit_rejected`, `stock_threshold_triggered`, `login_succeeded`, `login_failed`, `session_expired`, `backoffice_section_viewed`, `workflow_abandoned`, `api_latency_recorded` y `api_error_recorded`. Se incluyen `login_succeeded` y `session_expired` como mandatory porque permiten medir accesos legítimos e interrupciones de sesión junto a los controles de seguridad; el resto del catálogo está marcado como oportunidad.
 
 ## 7. Estrategia stream vs batch
 

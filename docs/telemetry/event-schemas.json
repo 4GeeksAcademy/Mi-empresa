@@ -270,7 +270,7 @@
           "name": "operation",
           "type": "string",
           "required": true,
-          "description": "Operación lógica de la integración",
+          "description": "Operación de inventario que falló validación",
           "sensitive": false,
           "sanitization": "controlled_allowlist"
         },
@@ -424,7 +424,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "frontend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the frontend has rendered the product detail view and the product identifier is available",
       "source_layer": "frontend"
     },
     {
@@ -482,7 +482,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after backend validation rejects the outbound order because the product is missing or available stock is below the requested quantity, before returning the rejection response",
       "source_layer": "backend"
     },
     {
@@ -531,7 +531,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the new product record has been committed to the database",
       "source_layer": "backend"
     },
     {
@@ -1092,7 +1092,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "when an integration call reaches a terminal failure after its configured retries are exhausted, or fails with a non-retryable error",
       "source_layer": "backend"
     },
     {
@@ -1150,7 +1150,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the new incident record has been committed to the database",
       "source_layer": "backend"
     },
     {
@@ -1199,7 +1199,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the incident status update has been committed to the database and both previous and new statuses are known",
       "source_layer": "backend"
     },
     {
@@ -1220,7 +1220,7 @@
           "type": "integer",
           "required": true,
           "description": "Identificador del proveedor",
-          "sensitive": true,
+          "sensitive": false,
           "sanitization": "none"
         },
         {
@@ -1257,7 +1257,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the supplier status update has been committed to the database and both previous and new statuses are known",
       "source_layer": "backend"
     },
     {
@@ -1306,7 +1306,7 @@
       "pii_policy": "No incluir secretos, tokens, email, texto libre ni payloads completos.",
       "throttling_or_deduplication": "Deduplicar por eventId; aplicar las reglas específicas del plan.",
       "producer": "backend",
-      "emit_when": "when the corresponding business operation completes or fails",
+      "emit_when": "after the requested incident report file has been generated successfully and is ready to be returned or downloaded",
       "source_layer": "backend"
     }
   ]
