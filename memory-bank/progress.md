@@ -1,5 +1,22 @@
 # Progress Log
 
+## 2026-10-03 (Corrección del bucle de redirección tras login)
+
+### Problema y causa
+- Al abrir una ruta protegida sin token, `Shell` guardaba `checked=false` en un estado inicial que persistía entre navegaciones.
+- Tras iniciar sesión, el `Shell` conservaba ese valor y seguía redirigiendo a `/login`, aunque ya existía un token.
+
+### Corrección
+- `uis/backoffice/components/shell.tsx`: recalcula la validez del token en cada render/ruta, en vez de conservar el resultado inicial obsoleto.
+- `uis/backoffice/tests/shell.test.tsx`: añade una regresión que reproduce entrar sin sesión, pasar por login y volver a la ruta protegida.
+- `uis/backoffice/jest.config.cjs`: mapea el alias `@/` usado por Next para que Jest pueda resolver imports del Shell.
+
+### Validaciones
+- `npm test -- --runInBand tests/auth.test.ts tests/shell.test.tsx` -> 2 suites, 4 tests aprobados.
+- `npm run lint -- --no-warn-ignored` -> OK.
+- Diagnósticos del editor en archivos modificados -> sin errores.
+- `npm run build` -> no completado: Next falló al descargar/procesar `IBM_Plex_Sans` vía `next/font/google` en el entorno; error ajeno al cambio de autenticación.
+
 ## 2026-07-21
 
 ### Estado inicial
