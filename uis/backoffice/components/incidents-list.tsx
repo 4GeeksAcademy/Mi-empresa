@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { correlatedFetch } from "@/lib/http";
 
 interface Incident {
   id: number;
@@ -124,7 +125,7 @@ export function IncidentsList() {
         const query = params.toString();
         const url = query ? `/api/incidents?${query}` : "/api/incidents";
 
-        const response = await fetch(url);
+        const response = await correlatedFetch(url);
         if (!response.ok) {
           throw new Error("No se pudieron cargar las incidencias.");
         }
@@ -170,7 +171,7 @@ export function IncidentsList() {
     );
 
     try {
-      const response = await fetch(`/api/incidents/${incidentId}/status`, {
+      const response = await correlatedFetch(`/api/incidents/${incidentId}/status`, {
         method: "PATCH",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({ status: newStatus }),

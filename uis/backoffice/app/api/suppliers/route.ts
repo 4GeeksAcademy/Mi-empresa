@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
@@ -19,7 +20,7 @@ export async function GET(request: Request) {
       ? `${BACKEND_BASE_URL}/suppliers?${query}`
       : `${BACKEND_BASE_URL}/suppliers`;
 
-    const response = await fetch(targetUrl, {
+    const response = await backendFetch(request, targetUrl, {
       method: "GET",
       headers: buildHeaders(request),
     });
@@ -44,7 +45,7 @@ export async function POST(request: Request) {
   try {
     const payload = await request.text();
 
-    const response = await fetch(`${BACKEND_BASE_URL}/suppliers`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/suppliers`, {
       method: "POST",
       headers: {
         "content-type": "application/json",

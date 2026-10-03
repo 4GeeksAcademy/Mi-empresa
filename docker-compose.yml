@@ -1,20 +1,22 @@
 services:
   interfaces:
     build:
-      context: ./uis
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: uis/Dockerfile
     working_dir: /app
     env_file:
       - .env
     environment:
       INVENTORY_API_INTERNAL_URL: ${INVENTORY_API_INTERNAL_URL:-http://backend:8000}
       INCIDENTS_API_INTERNAL_URL: ${INCIDENTS_API_INTERNAL_URL:-http://backend:8000}
+      TELEMETRY_ENDPOINT: http://backend:8000/telemetry/events
     ports:
       - "${WEBSITE_PORT:-3000}:3000"
       - "${BACKOFFICE_PORT:-3001}:3001"
     volumes:
       - ./uis:/app
       - ./src:/src:ro
+      - ./docs/telemetry:/docs/telemetry:ro
       - website_node_modules:/app/website/node_modules
       - backoffice_node_modules:/app/backoffice/node_modules
     networks:
@@ -26,8 +28,8 @@ services:
 
   backend:
     build:
-      context: ./services
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: services/Dockerfile
     working_dir: /app/api
     env_file:
       - .env
@@ -38,6 +40,7 @@ services:
     volumes:
       - ./services:/app
       - ./packages:/app/packages:ro
+      - ./docs/telemetry:/docs/telemetry:ro
     networks:
       - trackflow-dev
     healthcheck:

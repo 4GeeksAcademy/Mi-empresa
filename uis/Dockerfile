@@ -4,15 +4,16 @@ RUN apk add --no-cache bash
 
 WORKDIR /app
 
-COPY website/package*.json ./website/
+COPY uis/website/package*.json ./website/
 RUN cd website && npm ci
 
-COPY backoffice/package*.json ./backoffice/
+COPY uis/backoffice/package*.json ./backoffice/
 RUN cd backoffice && npm ci
 
-COPY start.sh /app/start.sh
-COPY website ./website
-COPY backoffice ./backoffice
+COPY uis/start.sh /app/start.sh
+COPY uis/website ./website
+COPY uis/backoffice ./backoffice
+COPY docs/telemetry /docs/telemetry
 
 RUN chmod +x /app/start.sh
 

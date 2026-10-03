@@ -1,11 +1,12 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
 export async function POST(request: Request) {
   try {
     const body = await request.json();
-    const response = await fetch(`${BACKEND_BASE_URL}/users`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/users`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
     }
 
     // Auto-login: devolver también el token
-    const loginResponse = await fetch(`${BACKEND_BASE_URL}/auth/login`, {
+    const loginResponse = await backendFetch(request, `${BACKEND_BASE_URL}/auth/login`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ email: body.email, password: body.password }),

@@ -22,13 +22,20 @@ describe("helpers de autenticacion del backoffice", () => {
   });
 
   it("verifyToken conserva tokens vigentes y elimina tokens vencidos", () => {
+    const fetchMock = global.fetch as jest.MockedFunction<typeof fetch>;
+    fetchMock.mockResolvedValueOnce(apiResponse(false, { detail: "expired" }));
     setToken(jwtWithExpiry(Date.now() / 1000 + 60));
     expect(verifyToken()).toBe(true);
     expect(getToken()).not.toBeNull();
 
-    setToken(jwtWithExpiry(Date.now() / 1000 - 60));
+    const expiredToken = jwtWithExpiry(Date.now() / 1000 - 60);
+    setToken(expiredToken);
     expect(verifyToken()).toBe(false);
     expect(getToken()).toBeNull();
+    expect(fetchMock).toHaveBeenCalledWith("/api/auth/me", expect.objectContaining({
+      headers: expect.any(Headers),
+    }));
+    expect(new Headers(fetchMock.mock.calls[0][1]?.headers).get("authorization")).toBe(`Bearer ${expiredToken}`);
   });
 
   it("login devuelve el token emitido y propaga el detalle de un fallo de API", async () => {

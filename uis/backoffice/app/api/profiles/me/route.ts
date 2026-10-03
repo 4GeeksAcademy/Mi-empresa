@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
@@ -9,7 +10,7 @@ export async function GET(request: Request) {
       return NextResponse.json({ detail: "No autorizado." }, { status: 401 });
     }
 
-    const response = await fetch(`${BACKEND_BASE_URL}/profiles/me`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/profiles/me`, {
       headers: { authorization: auth },
     });
     const data = await response.json();
@@ -30,7 +31,7 @@ export async function PUT(request: Request) {
     }
 
     const body = await request.json();
-    const response = await fetch(`${BACKEND_BASE_URL}/profiles/me`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/profiles/me`, {
       method: "PUT",
       headers: {
         "Content-Type": "application/json",

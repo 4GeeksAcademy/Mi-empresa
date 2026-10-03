@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useMemo, useState } from "react";
+import { correlatedFetch } from "@/lib/http";
+import { getToken } from "@/lib/auth";
 
 interface Summary {
   total_processed: number;
@@ -46,13 +48,13 @@ export function IncidentsAnalyzer() {
   async function onDownload() {
     setIsDownloading(true);
     try {
-      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      const token = getToken();
       const headers: Record<string, string> = {};
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const response = await fetch("/api/incidents/results/export", { headers });
+      const response = await correlatedFetch("/api/incidents/results/export", { headers });
       if (!response.ok) {
         const errorBody = (await response.json()) as { detail?: string };
         throw new Error(errorBody.detail ?? "No se pudo descargar el fichero.");
@@ -92,13 +94,13 @@ export function IncidentsAnalyzer() {
       const formData = new FormData();
       formData.append("file", file);
 
-      const token = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      const token = getToken();
       const headers: Record<string, string> = {};
       if (token) {
         headers["Authorization"] = `Bearer ${token}`;
       }
 
-      const response = await fetch("/api/incidents/analyze", {
+      const response = await correlatedFetch("/api/incidents/analyze", {
         method: "POST",
         headers,
         body: formData,
