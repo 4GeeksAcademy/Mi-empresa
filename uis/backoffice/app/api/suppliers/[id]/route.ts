@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
@@ -19,7 +20,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const response = await fetch(`${BACKEND_BASE_URL}/suppliers/${id}`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/suppliers/${id}`, {
       method: "GET",
       headers: buildHeaders(request),
     });
@@ -45,7 +46,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
 
-    const response = await fetch(`${BACKEND_BASE_URL}/suppliers/${id}`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/suppliers/${id}`, {
       method: "DELETE",
       headers: buildHeaders(request),
     });

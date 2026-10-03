@@ -1,5 +1,22 @@
 # Progress Log
 
+## 2026-10-03 (Corrección del bucle de redirección tras login)
+
+### Problema y causa
+- Al abrir una ruta protegida sin token, `Shell` guardaba `checked=false` en un estado inicial que persistía entre navegaciones.
+- Tras iniciar sesión, el `Shell` conservaba ese valor y seguía redirigiendo a `/login`, aunque ya existía un token.
+
+### Corrección
+- `uis/backoffice/components/shell.tsx`: recalcula la validez del token en cada render/ruta, en vez de conservar el resultado inicial obsoleto.
+- `uis/backoffice/tests/shell.test.tsx`: añade una regresión que reproduce entrar sin sesión, pasar por login y volver a la ruta protegida.
+- `uis/backoffice/jest.config.cjs`: mapea el alias `@/` usado por Next para que Jest pueda resolver imports del Shell.
+
+### Validaciones
+- `npm test -- --runInBand tests/auth.test.ts tests/shell.test.tsx` -> 2 suites, 4 tests aprobados.
+- `npm run lint -- --no-warn-ignored` -> OK.
+- Diagnósticos del editor en archivos modificados -> sin errores.
+- `npm run build` -> no completado: Next falló al descargar/procesar `IBM_Plex_Sans` vía `next/font/google` en el entorno; error ajeno al cambio de autenticación.
+
 ## 2026-07-21
 
 ### Estado inicial
@@ -558,3 +575,61 @@
 - Hipótesis, decisiones, PII, throttling, productor y momento de emisión presentes en todos los eventos.
 - `get_errors` sin errores.
 - `git diff --check` correcto.
+
+## 2026-10-03 (Captura de telemetria)
+
+### Decisiones aprobadas
+- Captura mixta: frontend para experiencia/intencion; backend como fuente de verdad para negocio, auth y rendimiento API. Sin duplicar confirmaciones ni alterar productores del catalogo.
+- Fase temporal sin persistencia ni garantias duraderas. Umbral backend configurable inicial 10, evento solo al cruzar de >= umbral a < umbral.
+
+### Cambios implementados
+- Receptor `POST /telemetry/events`, modelos Pydantic estrictos, validador de catalogo y receptor comun sin almacenamiento.
+- `docs/telemetry/runtime-rules.json` compartido por Python/TypeScript para enums, codigos, sanitizacion, rutas y rangos que no estaban explicitados en el catalogo.
+- Productor backend por peticion, correlacion en middleware/logs y resultados de inventario, auth, incidencias, proveedores y exportacion.
+- TelemetryService centralizado en backoffice: lotes de 20/10 segundos, tres reintentos 1/2/4 segundos, timeout, cola acotada y beacon con resultado comprobado.
+- Captura de navegacion, errores globales, busquedas filtradas y abandono de formularios. Sesiones anonimas/autenticadas, restauracion tras recarga y rotacion al cambiar de actor/logout.
+- Cabeceras de correlacion propagadas por todos los proxies; proxy same-origin para telemetria, transporte separado de negocio.
+- Builds Docker con contexto raiz y contrato compartido en `/docs/telemetry`; `.dockerignore` raiz preserva exclusiones de secretos, dependencias y datos runtime.
+- Documentacion y cobertura completa por evento en `docs/telemetry/implementation.md`; 12 mandatory y 10 oportunidades instrumentadas, 2 oportunidades no emitidas por ausencia de punto real.
+- Conservado el cambio previo del desarrollador en `telemetry-plan.md`. No se modificaron secretos, rutas protegidas, stock ni dependencias declaradas; sin commit.
+
+### Validaciones ejecutadas
+- Backend: `python -m pytest -q` -> 68 passed.
+- Backoffice con `npm ci`: `npm test -- --runInBand` -> 13 passed; lint sin errores/avisos; build exitoso, incluida ruta de telemetria.
+- Chromium real: login 200, dos lotes frontend -> proxy -> stub con 200, envelope de ocho campos, userId interno verificado, cabeceras de correlacion y sin email/contrasena.
+- Prueba de navegador detecto y permitio corregir captura de navegacion antes de resolver `/auth/me`; ahora espera identidad verificada.
+- Playwright se instalo temporalmente sin cambiar manifiestos; Chromium requirio bibliotecas extraidas en `/tmp` sin sudo. Se restauro el lockfile con `npm ci`.
+
+### Riesgos y pendientes
+- Sin buffer/DLQ/deduplicacion duradera, retencion/RBAC de colector, agregados y muestreo p99 ni proteccion de login por IP anonimizada. El stub no es un receptor publico productivo.
+- Beacon no confirma recepcion; lotes ya en vuelo no se duplican al cierre. Abandono no puede emitirse despues de destruir la pestana.
+- `inventory_product_viewed` bloqueado por ausencia de pantalla real de detalle; `integration_call_failed` pendiente por ausencia de adaptador con fallo terminal de reintentos.
+- npm ci informa 9 vulnerabilidades existentes (8 altas, 1 critica); dependencias no actualizadas fuera de alcance. Persisten avisos deprecados externos de jose/Starlette.
+
+### Verificacion posterior con `.env` local
+- Creado `.env` ignorado por Git, con SQLite temporal, almacenamiento auth/proveedores en `/tmp`, endpoint del stub y clave JWT exclusiva para desarrollo; sin credenciales externas.
+- `docker compose config --quiet` y `docker compose build` -> OK para interfaces y backend.
+- Compose arranca backend healthy e interfaces con Next en marcha. Puertos alternativos para no colisionar con los procesos locales: backoffice `localhost:3002`, backend `localhost:8001`, website `localhost:3003`.
+- Host -> backend `/health` -> 200; host -> backoffice `/login` -> 200; POST directo al stub -> `{"received":0}`.
+- Queda bloqueado `interfaces` container -> `backend`: `backend:8000` da `UND_ERR_CONNECT_TIMEOUT` y `host.docker.internal` da `EAI_AGAIN`, limitacion del runtime Docker anidado conocida en sesiones previas. No se modifico red/infra para sortearla.
+
+## 2026-10-03 (Cierre de evaluacion de telemetria)
+
+### Correcciones de la propuesta minima
+- `direct_stock_edit_rejected` cubre payloads `stock/current_stock` rechazados y metodos PUT/PATCH/DELETE rechazados en ruta de producto; no se agrega escritura directa.
+- `session_expired`: el cliente consulta `/auth/me` una vez con JWT vencido antes de limpiarlo; FastAPI sigue como productor y no atribuye un actor sin verificar.
+- Añadido ErrorBoundary React global; emite codigo controlado, ruta normalizada y release, sin mensaje ni stack.
+- `requestId` del envelope valida UUID; headers arbitrarios se sustituyen por UUID. Logs de excepciones omiten mensaje, stack y ruta cruda.
+- El `fetch` server-side del proxy se conserva como relay de transporte; no hay segunda captura desde componentes.
+
+### Reevaluacion
+- Backend: `python -m pytest -q -p no:cacheprovider` -> 69 passed.
+- Backoffice: `npm test -- --runInBand` -> 14 passed; lint, typecheck y build correctos.
+- Chromium: login y navegación a inventario; dos lotes reales frontend -> proxy -> stub con 200, ocho campos, actor interno, requestId UUID y email/contraseña sintéticos ausentes.
+- Stub directo con lote vacío -> 200 `{"received":0}`. Proxy en Compose -> 502 únicamente por conectividad anidada UI-container/backend; E2E host evita esa limitación.
+- Playwright y bibliotecas de Chromium se usaron temporalmente; luego `npm ci` restauró dependencias del lockfile. Manifests/lockfiles y `.env` permanecen intactos; sin commit.
+
+### Estado y pendientes
+- Criterios rubricados pasan en flujo host con navegador. El relay Next hace fetch server-side para reenvío, no para capturar un evento adicional.
+- La red Compose `interfaces -> backend` sigue limitada por el runtime Docker anidado; no se alteró configuración de red.
+- Vulnerabilidades npm/deprecations de dependencias existentes siguen fuera de alcance.

@@ -5,11 +5,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app/api
 
-COPY api/requirements.txt ./requirements.txt
+COPY services/api/requirements.txt ./requirements.txt
 RUN pip install --no-cache-dir uv \
     && uv pip install --system -r requirements.txt
 
-COPY api ./
+COPY services/api ./
+COPY docs/telemetry /docs/telemetry
 
 EXPOSE 8000
 

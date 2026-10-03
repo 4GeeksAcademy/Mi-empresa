@@ -8,10 +8,12 @@ from dotenv import load_dotenv
 from fastapi import Depends, HTTPException, status
 from fastapi.security import OAuth2PasswordBearer
 from jose import JWTError, jwt
+from jose.exceptions import ExpiredSignatureError
 from passlib.hash import bcrypt
 
 from auth_db import get_user_repository, UserRepository
 from auth_models import UserRole
+from telemetry import context, emit
 
 load_dotenv()
 
@@ -71,6 +73,10 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
         if sub is None:
             raise credentials_exception
         user_id = int(sub)
+    except ExpiredSignatureError:
+        state = context.get() or {}
+        emit("session_expired", {"reason_code": "session_expired", "route": state.get("route", "/unknown")})
+        raise credentials_exception
     except JWTError:
         raise credentials_exception
 
@@ -79,6 +85,9 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
     if user is None or not user.get("is_active", False):
         raise credentials_exception
 
+    state = context.get()
+    if state is not None:
+        state["userId"] = str(user["id"])
     return user
 
 
@@ -87,6 +96,8 @@ async def get_current_admin(current_user: dict[str, Any] = Depends(get_current_u
     Dependencia que verifica que el usuario autenticado tenga rol admin.
     """
     if current_user.get("role") != UserRole.ADMIN.value:
+        state = context.get() or {}
+        emit("unauthorized_access_rejected", {"route": state.get("route", "/unknown"), "http_status": 403, "required_role": "admin"}, str(current_user["id"]))
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="Se requiere rol admin para esta operacion.",

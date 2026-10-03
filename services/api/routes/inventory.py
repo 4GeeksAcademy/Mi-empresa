@@ -6,6 +6,7 @@ from sqlmodel import Session, func, select
 from auth import get_current_user
 from database import get_db
 from models import InboundOrder, OutboundOrder, Product
+from telemetry import emit, stock_threshold
 from schemas import (
     InboundOrderCreateInput,
     InventoryOrderResponse,
@@ -78,6 +79,7 @@ def create_product(
         )
     ).first()
     if existing is not None:
+        emit("inventory_validation_failed", {"operation": "product_create", "reason_code": "duplicate_sku", "warehouse": payload.warehouse.value})
         raise HTTPException(
             status_code=400,
             detail="Ya existe un producto con ese SKU en ese almacen.",
@@ -87,6 +89,7 @@ def create_product(
     db.add(product)
     db.commit()
     db.refresh(product)
+    emit("product_created", {"product_id": product.id, "sku": product.sku, "warehouse": product.warehouse.value}, str(current_user["id"]))
     return ProductResponse(
         id=product.id,
         name=product.name,
@@ -122,6 +125,7 @@ def create_inbound_order(
 ) -> InventoryOrderResponse:
     product = db.get(Product, payload.product_id)
     if product is None:
+        emit("inventory_validation_failed", {"operation": "inbound_order", "reason_code": "product_missing", "product_id": payload.product_id})
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
 
     order = InboundOrder(
@@ -132,6 +136,7 @@ def create_inbound_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    emit("inbound_order_created", {"order_id": order.id, "product_id": product.id, "sku": product.sku, "warehouse": product.warehouse.value, "quantity": order.quantity}, str(current_user["id"]))
     return InventoryOrderResponse(
         id=order.id,
         product_id=product.id,
@@ -155,10 +160,14 @@ def create_outbound_order(
 ) -> InventoryOrderResponse:
     product = db.get(Product, payload.product_id)
     if product is None:
+        emit("inventory_validation_failed", {"operation": "outbound_order", "reason_code": "product_missing", "product_id": payload.product_id})
+        emit("outbound_order_rejected", {"product_id": payload.product_id, "reason_code": "product_missing", "requested_quantity": payload.quantity})
         raise HTTPException(status_code=404, detail="Producto no encontrado.")
 
     stock = _current_stock(db, payload.product_id)
     if payload.quantity > stock:
+        emit("inventory_validation_failed", {"operation": "outbound_order", "reason_code": "insufficient_stock", "product_id": product.id})
+        emit("outbound_order_rejected", {"product_id": product.id, "reason_code": "insufficient_stock", "requested_quantity": payload.quantity, "available_quantity": stock})
         raise HTTPException(
             status_code=400,
             detail=f"Stock insuficiente: disponible {stock}, solicitado {payload.quantity}.",
@@ -172,6 +181,11 @@ def create_outbound_order(
     db.add(order)
     db.commit()
     db.refresh(order)
+    emit("outbound_order_created", {"order_id": order.id, "product_id": product.id, "sku": product.sku, "warehouse": product.warehouse.value, "quantity": order.quantity}, str(current_user["id"]))
+    threshold = stock_threshold()
+    remaining = stock - order.quantity
+    if stock >= threshold > remaining:
+        emit("stock_threshold_triggered", {"product_id": product.id, "sku": product.sku, "warehouse": product.warehouse.value, "current_stock": remaining, "threshold": threshold}, str(current_user["id"]))
     return InventoryOrderResponse(
         id=order.id,
         product_id=product.id,

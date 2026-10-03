@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { correlatedFetch } from "@/lib/http";
 
 interface SummaryData {
   total_incidents: number;
@@ -117,7 +118,7 @@ export function IncidentsSummary() {
       setError(null);
 
       try {
-        const response = await fetch("/api/incidents/summary");
+        const response = await correlatedFetch("/api/incidents/summary");
         if (!response.ok) {
           throw new Error("No se pudo obtener el resumen de incidencias.");
         }

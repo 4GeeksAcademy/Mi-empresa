@@ -6,3 +6,9 @@ This folder holds **cross-cutting documentation** for the monorepo: architecture
 - **Recommendation**: organize docs by topic (architecture, deployment, data, security, observability, etc.) and keep links from each component’s README to these guides.
 
 > _Spanish version: [README.es.md](./README.es.md)._
+
+## TrackFlow telemetry
+
+- [Approved plan](telemetry/telemetry-plan.md)
+- [Event catalog](telemetry/event-schemas.json)
+- [Capture implementation, coverage and limitations](telemetry/implementation.md)

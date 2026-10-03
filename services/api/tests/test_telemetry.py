@@ -1,0 +1,120 @@
+from uuid import uuid4
+
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
+
+from routes.telemetry import router
+from telemetry import normalized_route
+from telemetry import TelemetryMiddleware
+
+app = FastAPI()
+app.include_router(router)
+client = TestClient(app)
+
+
+def event():
+    return {
+        "eventId": str(uuid4()), "timestamp": "2026-10-03T12:00:00Z",
+        "sessionId": str(uuid4()), "userId": None,
+        "event_type": "backoffice_section_viewed", "schemaVersion": "1.0",
+        "requestId": str(uuid4()), "properties": {"section": "inventory"},
+    }
+
+
+def test_stub_accepts_batch_and_logs_only_types(caplog):
+    with caplog.at_level("INFO", logger="trackflow.telemetry"):
+        response = client.post("/telemetry/events", json={"events": [event(), event()]})
+    assert response.status_code == 200
+    assert response.json() == {"received": 2}
+    assert "backoffice_section_viewed" in caplog.text
+    assert "eventId" not in caplog.text
+
+
+def test_stub_rejects_unknown_fields_and_private_properties():
+    for change in [{"email": "secret@example.com"}, {"properties": {"section": "inventory", "password": "secret"}}, {"properties": {"section": "unknown"}}, {"event_type": "unknown"}, {"timestamp": "2026-10-03T12:00:00"}]:
+        payload = event() | change
+        assert client.post("/telemetry/events", json={"events": [payload]}).status_code == 422
+    assert client.post("/telemetry/events", json={"events": [], "extra": True}).status_code == 422
+    assert client.post("/telemetry/events", json={"events": [event() | {"requestId": "synthetic-person-name"}]}).status_code == 422
+
+
+def test_routes_remove_identifiers_queries_and_unknown_text():
+    assert normalized_route("/inventory/products/123?email=secret") == "/inventory/products/{product_id}"
+    assert normalized_route("/something/secret@example.com") == "/unknown"
+
+
+def test_unhandled_exception_log_omits_message_and_raw_path(caplog):
+    import asyncio
+    from main import unhandled_exception_handler
+    from starlette.requests import Request
+
+    scope = {
+        "type": "http", "method": "GET", "path": "/users/synthetic@example.test",
+        "headers": [], "query_string": b"", "scheme": "http", "server": ("test", 80),
+        "client": ("127.0.0.1", 1234), "http_version": "1.1",
+    }
+    with caplog.at_level("ERROR", logger="trackflow_api"):
+        response = asyncio.run(unhandled_exception_handler(Request(scope), RuntimeError("synthetic@example.test")))
+    assert response.status_code == 500
+    assert "synthetic@example.test" not in caplog.text
+    assert "/unknown" in caplog.text
+
+
+def test_http_errors_latency_and_receiver_exclusion(monkeypatch):
+    import telemetry
+
+    captured = []
+    monkeypatch.setattr(telemetry, "receive", lambda events: captured.extend(events))
+    instrumented = FastAPI()
+    instrumented.include_router(router)
+    instrumented.add_middleware(TelemetryMiddleware)
+
+    @instrumented.get("/health")
+    def failure():
+        raise RuntimeError("private failure body")
+
+    @instrumented.get("/ok")
+    def success():
+        return {"status": "ok"}
+
+    connection = TestClient(instrumented, raise_server_exceptions=False)
+    response = connection.get("/health", headers={"X-Request-ID": "c84db3fb-f2a6-4d62-b8bc-3ba5bf70dcc8"})
+    assert response.status_code == 500
+    assert [item.event_type for item in captured] == ["api_latency_recorded", "api_error_recorded"]
+    assert all(item.requestId == response.headers["x-request-id"] for item in captured)
+    assert "private" not in str([item.model_dump() for item in captured])
+    captured.clear()
+    successful = connection.get("/ok")
+    assert successful.status_code == 200
+    assert [(item.event_type, item.properties["status_code"]) for item in captured] == [
+        ("api_latency_recorded", 200)
+    ]
+    captured.clear()
+    assert connection.post("/telemetry/events", json={"events": []}).status_code == 200
+    assert captured == []
+
+
+def test_auth_outcomes_and_expired_session(monkeypatch):
+    import asyncio
+    from datetime import timedelta
+    import telemetry
+    from auth import create_access_token, get_current_user, hash_password
+    from auth_db import get_user_repository
+    from auth_models import LoginInput, UserPersistence, utc_now_iso
+    from routes.auth import login
+    from fastapi import HTTPException
+    import pytest
+
+    captured = []
+    monkeypatch.setattr(telemetry, "receive", lambda events: captured.extend(events))
+    user = get_user_repository().create(UserPersistence(email="private@example.com", hashed_password=hash_password("password"), role="admin", is_active=True, created_at=utc_now_iso()))
+    login(LoginInput(email="private@example.com", password="password"))
+    with pytest.raises(HTTPException):
+        login(LoginInput(email="private@example.com", password="incorrect"))
+    expired = create_access_token({"sub": str(user.id)}, timedelta(minutes=-1))
+    with pytest.raises(HTTPException):
+        asyncio.run(get_current_user(expired))
+    assert [item.event_type for item in captured] == ["login_succeeded", "login_failed", "session_expired"]
+    assert captured[0].userId == str(user.id)
+    assert captured[1].userId is None
+    assert "private@example.com" not in str([item.model_dump() for item in captured])

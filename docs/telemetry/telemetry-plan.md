@@ -1,7 +1,3 @@
-# Plan de Telemetría — TrackFlow
-
-**Estado:** diseño para revisión | **Versión:** 1.0 | **Fecha:** 2026-09-22
-
 ## 1. Resumen ejecutivo
 
 TrackFlow necesita convertir sus operaciones binacionales (Los Ángeles y Zaragoza) en información accionable sin modificar la regla de negocio existente: el stock solo cambia mediante órdenes de entrada o salida trazables a un usuario. Este plan propone un catálogo de eventos para inventario, autenticación, navegación, rendimiento, errores, incidencias y proveedores. Cada evento tiene una hipótesis y una decisión asociada; los eventos críticos se entregan en stream y los analíticos en batch.

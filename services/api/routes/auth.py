@@ -20,6 +20,7 @@ from reset_tokens import (
     TokenUsedError,
     get_reset_token_repository,
 )
+from telemetry import emit
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,6 +30,7 @@ def login(payload: LoginInput) -> TokenResponse:
     repo = get_user_repository()
     user_doc = repo.get_raw_by_email(payload.email)
     if user_doc is None:
+        emit("login_failed", {"reason_code": "invalid_credentials"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contrasena incorrectos.",
@@ -36,6 +38,7 @@ def login(payload: LoginInput) -> TokenResponse:
         )
 
     if not verify_password(payload.password, user_doc["hashed_password"]):
+        emit("login_failed", {"reason_code": "invalid_credentials"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Email o contrasena incorrectos.",
@@ -43,12 +46,14 @@ def login(payload: LoginInput) -> TokenResponse:
         )
 
     if not user_doc.get("is_active", False):
+        emit("login_failed", {"reason_code": "inactive_account"})
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Usuario inactivo.",
         )
 
     access_token = create_access_token(data={"sub": str(user_doc["id"])})
+    emit("login_succeeded", {"auth_method": "password", "role": user_doc["role"]}, str(user_doc["id"]))
     return TokenResponse(access_token=access_token)
 
 
@@ -87,7 +92,9 @@ def forgot_password(payload: ForgotPasswordInput) -> MessageResponse:
         token = token_repo.create(user_id=user_doc["id"], expires_minutes=30)
         send_password_reset_email(email=payload.email, token=token)
 
-    return MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+    response = MessageResponse(message=FORGOT_PASSWORD_MESSAGE)
+    emit("password_reset_requested", {"result": "accepted"})
+    return response
 
 
 @router.post("/reset-password", response_model=MessageResponse)

@@ -55,3 +55,15 @@ python seed.py
 ```
 
 El seed es idempotente: no duplica proveedores existentes por `nombre + pais`.
+
+## Telemetria temporal
+
+`POST /telemetry/events` acepta `{"events": [...]}`, valida envelope y allowlists
+y responde `200 {"received": N}` sin persistencia. Registra solo cantidad y tipos.
+Los productores backend entregan un lote por peticion al receptor comun en proceso.
+
+`TELEMETRY_ENDPOINT` se lee sin redirigir el stub; `TELEMETRY_STOCK_THRESHOLD`
+configura el cruce de stock bajo (default 10).
+Consultar [cobertura y limitaciones](../../docs/telemetry/implementation.md).
+Los `requestId` recibidos se limitan a UUID; errores internos se registran con
+ruta normalizada y tipo de excepción, sin mensaje ni stack.

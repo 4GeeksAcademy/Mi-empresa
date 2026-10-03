@@ -15,6 +15,7 @@ from models import (
 )
 from pydantic import BaseModel, ConfigDict
 from cache import suppliers_cache
+from telemetry import emit
 
 router = APIRouter(prefix="/suppliers", tags=["suppliers"])
 
@@ -112,6 +113,7 @@ def update_supplier_status(
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
+        previous = repo.get(supplier_id)
         updated = repo.update_status(supplier_id, payload.status)
     except Exception as exc:
         raise HTTPException(
@@ -121,6 +123,8 @@ def update_supplier_status(
     if updated is None:
         raise HTTPException(status_code=404, detail="Proveedor no encontrado.")
     suppliers_cache.invalidate("suppliers:list:")
+    if previous is not None and previous.status != updated.status:
+        emit("supplier_status_changed", {"supplier_id": updated.id, "from_status": previous.status, "to_status": updated.status, "country": updated.pais}, str(current_user["id"]))
     return updated
 
 
