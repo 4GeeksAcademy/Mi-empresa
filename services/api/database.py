@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import Any
 
 from dotenv import load_dotenv
+from sqlalchemy.engine import make_url
 from sqlmodel import Session, SQLModel, create_engine
 from tinydb import Query, TinyDB
 
@@ -18,6 +19,7 @@ from models import (
     SupplierPersistence,
     SupplierResponse,
     SupplierStatus,
+    TelemetryEventRecord,
     utc_now_iso,
 )
 
@@ -32,6 +34,11 @@ def _resolve_database_url() -> str:
         raise RuntimeError(
             "DATABASE_URL no configurada. Define DATABASE_URL (Supabase) en el archivo .env."
         )
+    url = make_url(database_url)
+    if "pgbouncer" in url.query:
+        query = dict(url.query)
+        query.pop("pgbouncer")
+        return url.set(query=query).render_as_string(hide_password=False)
     return database_url
 
 
@@ -41,8 +48,8 @@ def get_engine() -> Any:
 
 
 def init_inventory_db() -> None:
-    """Crea el esquema de inventario en Supabase si no existe."""
-    # Product/InboundOrder/OutboundOrder ya estan registrados en SQLModel.metadata
+    """Crea los esquemas SQLModel en Supabase si no existen."""
+    # Product, orders y telemetry_events estan registrados en SQLModel.metadata
     # porque este modulo importa `models` (arriba) antes de llamar a create_all.
     SQLModel.metadata.create_all(get_engine())
 

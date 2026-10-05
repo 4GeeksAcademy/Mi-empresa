@@ -12,9 +12,13 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlmodel import Session
 from starlette.requests import Request
 from starlette.responses import JSONResponse
 from dotenv import load_dotenv
+
+from database import get_engine
+from models import TelemetryEventRecord
 
 load_dotenv()
 CONTRACT_DIR = Path(__file__).resolve().parents[2] / "docs" / "telemetry"
@@ -126,10 +130,34 @@ class TelemetryEvent(BaseModel):
 
 class TelemetryBatch(BaseModel):
     model_config = ConfigDict(extra="forbid")
-    events: list[TelemetryEvent] = Field(max_length=100)
+    events: list[Any] = Field(max_length=100)
 
 
 def receive(events: list[TelemetryEvent]) -> None:
+    if not events:
+        return
+
+    records = [
+        TelemetryEventRecord(
+            event_id=event.eventId,
+            timestamp=datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
+            session_id=event.sessionId,
+            user_id=event.userId,
+            event_type=event.event_type,
+            schema_version=event.schemaVersion,
+            request_id=event.requestId,
+            service=EVENTS[event.event_type]["producer"],
+            tags=event.properties,
+        )
+        for event in events
+    ]
+    with Session(get_engine()) as session:
+        try:
+            session.add_all(records)
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
     logger.info("received=%s event_types=%s", len(events), ",".join(event.event_type for event in events))
 
 

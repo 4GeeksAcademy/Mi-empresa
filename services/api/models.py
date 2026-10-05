@@ -3,7 +3,8 @@ from enum import Enum
 from typing import List
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, Index, JSON, UniqueConstraint
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
 
@@ -124,3 +125,23 @@ class OutboundOrder(SQLModel, table=True):
     user_uuid: str
 
     product: Product | None = Relationship(back_populates="outbound_orders")
+
+
+class TelemetryEventRecord(SQLModel, table=True):
+    __tablename__ = "telemetry_events"
+    __table_args__ = (
+        Index("ix_telemetry_events_timestamp", "timestamp"),
+        Index("ix_telemetry_events_event_type", "event_type"),
+        Index("ix_telemetry_events_tags_gin", "tags", postgresql_using="gin"),
+    )
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    event_id: str = SQLField(max_length=36)
+    timestamp: datetime
+    session_id: str | None = SQLField(default=None, max_length=36)
+    user_id: str | None = SQLField(default=None, max_length=36)
+    event_type: str = SQLField(max_length=100)
+    schema_version: str = SQLField(max_length=16)
+    request_id: str = SQLField(max_length=128)
+    service: str = SQLField(max_length=32)
+    tags: dict = SQLField(sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))

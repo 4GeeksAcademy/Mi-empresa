@@ -56,14 +56,23 @@ python seed.py
 
 El seed es idempotente: no duplica proveedores existentes por `nombre + pais`.
 
-## Telemetria temporal
+## Telemetria
 
-`POST /telemetry/events` acepta `{"events": [...]}`, valida envelope y allowlists
-y responde `200 {"received": N}` sin persistencia. Registra solo cantidad y tipos.
-Los productores backend entregan un lote por peticion al receptor comun en proceso.
+`POST /telemetry/events` acepta `{"events": [...]}` con hasta 100 elementos,
+valida cada envelope y sus allowlists de forma independiente y responde
+`200 {"received": N, "stored": M, "rejected": R}`. Los eventos validos se
+guardan juntos en una sola transaccion en `telemetry_events`; los eventos del
+backend usan el mismo receptor en proceso. El campo `service` se deriva del
+productor declarado en el catalogo y `tags` conserva `properties`.
 
-`TELEMETRY_ENDPOINT` se lee sin redirigir el stub; `TELEMETRY_STOCK_THRESHOLD`
-configura el cruce de stock bajo (default 10).
+La tabla se crea junto al esquema SQLModel al iniciar la API. Tiene indices por
+`timestamp` y `event_type`, e indice GIN sobre `tags`; la API solo expone
+insercion, no actualizacion ni borrado. Un error de persistencia revierte el lote
+y responde HTTP 500; un envelope no parseable responde HTTP 422.
+
+Los productores backend persisten mediante el receptor comun en proceso y no
+hacen HTTP contra `TELEMETRY_ENDPOINT`. `TELEMETRY_STOCK_THRESHOLD` configura
+el cruce de stock bajo (default 10).
 Consultar [cobertura y limitaciones](../../docs/telemetry/implementation.md).
 Los `requestId` recibidos se limitan a UUID; errores internos se registran con
 ruta normalizada y tipo de excepción, sin mensaje ni stack.
