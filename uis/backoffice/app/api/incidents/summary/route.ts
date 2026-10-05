@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const response = await fetch(`${BACKEND_BASE_URL}/api/incidents/summary`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/api/incidents/summary`, {
       method: "GET",
     });
 

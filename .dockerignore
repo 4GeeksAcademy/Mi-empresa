@@ -1,0 +1,15 @@
+.git
+**/node_modules
+**/.next
+**/__pycache__
+**/*.pyc
+**/*.pyo
+**/.venv
+**/.env
+**/.env.*
+**/*.log
+**/coverage
+**/tests
+services/api/data/*.json
+services/api/data/*.db
+audit

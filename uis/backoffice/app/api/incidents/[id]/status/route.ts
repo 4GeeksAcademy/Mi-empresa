@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL = process.env.INCIDENTS_API_INTERNAL_URL ?? "http://backend:8000";
 
@@ -11,7 +12,7 @@ export async function PATCH(request: Request, { params }: RouteParams) {
     const { id } = await params;
     const payload = await request.text();
 
-    const response = await fetch(`${BACKEND_BASE_URL}/api/incidents/${id}/status`, {
+    const response = await backendFetch(request, `${BACKEND_BASE_URL}/api/incidents/${id}/status`, {
       method: "PATCH",
       headers: { "content-type": "application/json" },
       body: payload,

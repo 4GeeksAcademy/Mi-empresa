@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { useTelemetryWorkflow } from "@/lib/use-telemetry-workflow";
 import {
   createInboundOrder,
   createOutboundOrder,
@@ -129,6 +130,7 @@ export function InventoryProducts() {
 }
 
 export function InventoryOrderForm({ direction }: { direction: "inbound" | "outbound" }) {
+  const workflow = useTelemetryWorkflow(`${direction}_order`);
   const router = useRouter();
   const { products, loading, error } = useProducts();
   const [selectedProductId, setSelectedProductId] = useState(() => {
@@ -177,14 +179,19 @@ export function InventoryOrderForm({ direction }: { direction: "inbound" | "outb
       return;
     }
     setSubmitting(true);
+    workflow.submit();
+    let orderCommitted = false;
     try {
       if (isOutbound) await createOutboundOrder(Number(selectedProductId), parsedQuantity);
       else await createInboundOrder(Number(selectedProductId), parsedQuantity);
+      orderCommitted = true;
+      workflow.complete();
       setQuantity("");
       setMessage(`${title} registrada correctamente.`);
       const updatedProduct = await getProduct(Number(selectedProductId));
       setRefreshedProduct(updatedProduct);
     } catch (reason: unknown) {
+      if (!orderCommitted) workflow.fail();
       if (reason instanceof InventoryApiError && reason.status === 401) {
         router.replace("/login");
       } else {
@@ -204,7 +211,7 @@ export function InventoryOrderForm({ direction }: { direction: "inbound" | "outb
       {loading && <p className="text-sm text-slate-500">Cargando productos...</p>}
       {(error || formError) && <p className="mb-4 rounded-lg bg-red-50 px-4 py-3 text-sm font-semibold text-red-700">{error || formError}</p>}
       {message && <p className="mb-4 rounded-lg bg-emerald-50 px-4 py-3 text-sm font-semibold text-emerald-700">{message}</p>}
-      <form className="space-y-5" onSubmit={submitOrder}>
+      <form className="space-y-5" onSubmit={submitOrder} onChange={workflow.begin}>
         <label className="block text-sm font-semibold text-slate-700">Producto
           <select value={selectedProductId} onChange={(event) => { setRefreshedProduct(null); setQuantityError(""); setSelectedProductId(event.target.value); }} className="mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-3 text-slate-900" required>
             <option value="">Selecciona un producto</option>

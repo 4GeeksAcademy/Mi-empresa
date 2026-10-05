@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { IBM_Plex_Sans } from "next/font/google";
 import "./globals.css";
 import { Shell } from "@/components/shell";
+import { TelemetryProvider } from "@/components/telemetry-provider";
 
 const plex = IBM_Plex_Sans({
   subsets: ["latin"],
@@ -21,7 +22,9 @@ export default function RootLayout({
   return (
     <html lang="es">
       <body className={plex.className}>
-        <Shell>{children}</Shell>
+        <TelemetryProvider>
+          <Shell>{children}</Shell>
+        </TelemetryProvider>
       </body>
     </html>
   );

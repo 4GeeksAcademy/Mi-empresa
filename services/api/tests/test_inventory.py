@@ -92,6 +92,32 @@ def test_inventory_products_and_stock_movements(inventory_client: TestClient) ->
     assert detail.json()["current_stock"] == 6
 
 
+def test_telemetry_orders_threshold_and_direct_edit(inventory_client, monkeypatch):
+    import telemetry
+
+    batches = []
+    monkeypatch.setattr(telemetry, "receive", lambda events: batches.append(list(events)))
+    headers = {**_auth_header(), "X-Request-ID": "b86d8c30-9542-4cdd-9dcc-b91592841280"}
+    product = inventory_client.post("/inventory/products", json={"name": "Telemetry", "sku": "TEL-001", "warehouse": "zaragoza"}, headers=headers).json()
+    inventory_client.post("/inventory/orders/inbound", json={"product_id": product["id"], "quantity": 10}, headers=headers)
+    inventory_client.post("/inventory/orders/outbound", json={"product_id": product["id"], "quantity": 1}, headers=headers)
+    inventory_client.post("/inventory/orders/outbound", json={"product_id": product["id"], "quantity": 1}, headers=headers)
+    rejected = inventory_client.post("/inventory/products", json={"name": "Blocked", "sku": "TEL-002", "warehouse": "zaragoza", "current_stock": 999}, headers=headers)
+    assert rejected.status_code == 422
+    method_rejected = inventory_client.patch(f"/inventory/products/{product['id']}", json={"current_stock": 999}, headers=headers)
+    assert method_rejected.status_code == 405
+    events = [item for batch in batches for item in batch]
+    types = [item.event_type for item in events]
+    assert types.count("stock_threshold_triggered") == 1
+    assert types.count("outbound_order_created") == 2
+    assert "inbound_order_created" in types
+    rejected_edits = [item for item in events if item.event_type == "direct_stock_edit_rejected"]
+    assert [item.properties["http_status"] for item in rejected_edits] == [422, 405]
+    assert "inventory_validation_failed" in types
+    assert all(item.requestId == headers["X-Request-ID"] for item in events)
+    assert all(item.userId is not None for item in events if item.event_type.endswith("order_created"))
+
+
 def test_inventory_lists_products_and_returns_not_found_for_unknown_product(
     inventory_client: TestClient,
 ) -> None:

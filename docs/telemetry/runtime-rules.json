@@ -1,0 +1,35 @@
+{
+  "schemaVersion": "1.0",
+  "values": {
+    "warehouse": ["los_angeles", "zaragoza"],
+    "role": ["admin", "manager", "user"],
+    "required_role": ["admin", "manager", "user"],
+    "method": ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS", "HEAD"],
+    "section": ["dashboard", "inventory", "suppliers", "incidents", "account", "login", "register"],
+    "source": ["product_detail"],
+    "workflow": ["inbound_order", "outbound_order", "supplier_create", "incident_create"],
+    "last_step": ["form_started", "form_submitted"],
+    "filter_type": ["country", "category", "status", "warehouse"],
+    "operation": ["product_create", "inbound_order", "outbound_order", "inventory_request"],
+    "reason_code": ["invalid_credentials", "inactive_account", "session_expired", "invalid_input", "duplicate_sku", "product_missing", "insufficient_stock", "direct_stock_forbidden"],
+    "error_code": ["validation_error", "unauthorized", "forbidden", "not_found", "request_rejected", "server_error", "javascript_error", "unhandled_rejection", "network_error"],
+    "resource": ["inventory_product"],
+    "auth_method": ["password"],
+    "result": ["accepted"],
+    "release": ["backoffice-0.1.0"],
+    "category": ["logistica", "tracking", "devolucion", "facturacion", "soporte"],
+    "origin": ["customer", "branch", "internal"],
+    "branch": ["los-angeles", "zaragoza", "central"],
+    "country": ["US", "ES"],
+    "report_type": ["incident_analysis"],
+    "format": ["csv"]
+  },
+  "eventValues": {
+    "incident_status_changed": {"from_status": ["open", "in_progress", "resolved", "discarded"], "to_status": ["open", "in_progress", "resolved", "discarded"]},
+    "supplier_status_changed": {"from_status": ["activo", "suspendido"], "to_status": ["activo", "suspendido"]}
+  },
+  "positiveIntegers": ["order_id", "product_id", "incident_id", "supplier_id", "quantity", "requested_quantity", "threshold"],
+  "maxInteger": 9007199254740991,
+  "workflowTimeoutMs": 60000,
+  "routes": ["/", "/login", "/register", "/forgot-password", "/reset-password", "/suppliers", "/incidents", "/incidents/new", "/incidents/summary", "/incidents-analysis", "/account/profile", "/account/change-password", "/account/forgot-password", "/account/reset-password", "/backoffice/inventory/products", "/backoffice/inventory/products/{product_id}", "/backoffice/inventory/orders", "/backoffice/inventory/orders/inbound", "/backoffice/inventory/orders/outbound", "/inventory/products", "/inventory/products/{product_id}", "/inventory/orders", "/inventory/orders/inbound", "/inventory/orders/outbound", "/auth/login", "/auth/me", "/auth/register", "/auth/forgot-password", "/auth/reset-password", "/auth/change-password", "/api/incidents", "/api/incidents/summary", "/api/incidents/{incident_id}", "/api/incidents/{incident_id}/status", "/api/incidents/analyze", "/api/incidents/results/export", "/suppliers/{supplier_id}", "/suppliers/{supplier_id}/status", "/suppliers/{supplier_id}/rate", "/profiles/me", "/users", "/users/{user_id}", "/health", "/unknown"]
+}

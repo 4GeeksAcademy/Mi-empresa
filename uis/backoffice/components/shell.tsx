@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import Link from "next/link";
 import { verifyToken } from "@/lib/auth";
@@ -12,11 +12,9 @@ export function Shell({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const isPublic = PUBLIC_ROUTES.includes(pathname);
 
-  // verifyToken es síncrono: lo evaluamos directamente si no es ruta pública
-  const [checked] = useState(() => {
-    if (typeof window === "undefined") return false;
-    return isPublic || verifyToken();
-  });
+  // El Shell persiste entre navegaciones: calcula el token en cada render para
+  // no reutilizar el estado no autenticado tras completar el login.
+  const checked = typeof window !== "undefined" && (isPublic || verifyToken());
 
   useEffect(() => {
     if (!isPublic && !checked) {

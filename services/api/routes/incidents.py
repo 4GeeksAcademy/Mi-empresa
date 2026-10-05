@@ -11,6 +11,7 @@ from incidents.models import (
 )
 from incidents.repository import get_incidents_repository
 from cache import incidents_cache
+from telemetry import emit
 
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
@@ -29,6 +30,7 @@ def create_incident(payload: IncidentCreate) -> IncidentResponse:
 
     incidents_cache.invalidate("incidents:summary")
     incidents_cache.invalidate("incidents:list:")
+    emit("incident_created", {"incident_id": created.id, "category": created.category, "origin": created.origin, "branch": created.branch})
     return created
 
 
@@ -116,6 +118,7 @@ def update_incident_status(
     """Actualiza el estado de una incidencia validando transiciones."""
     repo = get_incidents_repository()
     try:
+        previous = repo.get(incident_id)
         updated = repo.update_status(incident_id, payload.status)
     except ValueError as exc:
         raise HTTPException(
@@ -131,4 +134,6 @@ def update_incident_status(
 
     incidents_cache.invalidate("incidents:summary")
     incidents_cache.invalidate("incidents:list:")
+    if previous is not None and previous.status != updated.status:
+        emit("incident_status_changed", {"incident_id": updated.id, "from_status": previous.status, "to_status": updated.status})
     return updated

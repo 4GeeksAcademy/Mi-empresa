@@ -1,4 +1,5 @@
 import { getToken } from "@/lib/auth";
+import { correlatedFetch } from "./http";
 
 export type Warehouse = "los_angeles" | "zaragoza";
 
@@ -42,7 +43,7 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
 
   let response: Response;
   try {
-    response = await fetch(`${API_BASE_URL}${API_PATH_PREFIX}${path}`, {
+    response = await correlatedFetch(`${API_BASE_URL}${API_PATH_PREFIX}${path}`, {
       ...init,
       headers: {
         "Content-Type": "application/json",

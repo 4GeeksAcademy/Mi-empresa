@@ -1,6 +1,9 @@
 "use client";
 
 import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { correlatedFetch } from "@/lib/http";
+import { track } from "@/lib/telemetry";
+import { useTelemetryWorkflow } from "@/lib/use-telemetry-workflow";
 
 type SupplierCountry = "US" | "ES";
 type SupplierStatus = "activo" | "suspendido";
@@ -54,6 +57,7 @@ function parseErrorDetail(errorBody: unknown): string {
 }
 
 export function SuppliersDirectory() {
+  const workflow = useTelemetryWorkflow("supplier_create");
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [loading, setLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -84,13 +88,17 @@ export function SuppliersDirectory() {
     setError(null);
 
     try {
-      const response = await fetch(query ? `/api/suppliers?${query}` : "/api/suppliers");
+      const response = await correlatedFetch(query ? `/api/suppliers?${query}` : "/api/suppliers");
       if (!response.ok) {
         const body = (await response.json()) as unknown;
         throw new Error(parseErrorDetail(body));
       }
 
       const payload = (await response.json()) as Supplier[];
+      const filters = new URLSearchParams(query);
+      for (const [key, filterType] of [["pais", "country"], ["categoria", "category"]]) {
+        if (filters.has(key)) track("search_executed", { section: "suppliers", filter_type: filterType, result_count: payload.length });
+      }
       setSuppliers(payload);
       setDraftRates(
         payload.reduce<Record<number, string>>((acc, supplier) => {
@@ -110,10 +118,9 @@ export function SuppliersDirectory() {
   }, [query]);
 
   useEffect(() => {
-    // Carga inicial y recarga al cambiar filtros; sincroniza estado con API externa.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    void fetchSuppliers();
-  }, [fetchSuppliers]);
+    const timer = setTimeout(() => { void fetchSuppliers(); }, query ? 500 : 0);
+    return () => clearTimeout(timer);
+  }, [fetchSuppliers, query]);
 
   function toggleCategorySelection(category: SupplierCategory, checked: boolean) {
     setNewCategories((current) => {
@@ -150,8 +157,9 @@ export function SuppliersDirectory() {
     };
 
     setIsCreating(true);
+    workflow.submit();
     try {
-      const response = await fetch("/api/suppliers", {
+      const response = await correlatedFetch("/api/suppliers", {
         method: "POST",
         headers: {
           "content-type": "application/json",
@@ -165,6 +173,7 @@ export function SuppliersDirectory() {
       }
 
       setMessage("Proveedor registrado correctamente.");
+      workflow.complete();
       setNewName("");
       setNewRate("5");
       setNewCountry("US");
@@ -172,6 +181,7 @@ export function SuppliersDirectory() {
       setNewCategories(["transporte"]);
       await fetchSuppliers();
     } catch (caughtError) {
+      workflow.fail();
       if (caughtError instanceof Error) {
         setError(caughtError.message);
       } else {
@@ -194,7 +204,7 @@ export function SuppliersDirectory() {
 
     setUpdatingSupplierId(id);
     try {
-      const response = await fetch(`/api/suppliers/${id}/rate`, {
+      const response = await correlatedFetch(`/api/suppliers/${id}/rate`, {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -228,7 +238,7 @@ export function SuppliersDirectory() {
 
     setUpdatingSupplierId(supplier.id);
     try {
-      const response = await fetch(`/api/suppliers/${supplier.id}/status`, {
+      const response = await correlatedFetch(`/api/suppliers/${supplier.id}/status`, {
         method: "PATCH",
         headers: {
           "content-type": "application/json",
@@ -296,7 +306,7 @@ export function SuppliersDirectory() {
 
       <article className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
         <h2 className="text-lg font-bold text-slate-900">Registrar proveedor</h2>
-        <form onSubmit={handleCreateSupplier} className="mt-4 grid gap-4 md:grid-cols-2">
+        <form onSubmit={handleCreateSupplier} onChange={workflow.begin} className="mt-4 grid gap-4 md:grid-cols-2">
           <label className="text-sm font-semibold text-slate-700 md:col-span-2">
             Nombre
             <input

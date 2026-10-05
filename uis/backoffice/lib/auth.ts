@@ -1,3 +1,6 @@
+import { correlatedFetch } from "./http";
+import { telemetry } from "./telemetry";
+
 const AUTH_TOKEN_KEY = "auth_token";
 
 // ─── Types ────────────────────────────────────────────────────────────
@@ -44,6 +47,7 @@ export function setToken(token: string): void {
 
 export function removeToken(): void {
   localStorage.removeItem(AUTH_TOKEN_KEY);
+  telemetry.setUser(null);
 }
 
 /**
@@ -73,6 +77,9 @@ export function verifyToken(): boolean {
   if (!token) return false;
 
   if (isTokenExpired(token)) {
+    void correlatedFetch("/api/auth/me", {
+      headers: { Authorization: `Bearer ${token}` },
+    }).catch(() => undefined);
     removeToken();
     return false;
   }
@@ -83,7 +90,7 @@ export function verifyToken(): boolean {
 // ─── Auth API calls ───────────────────────────────────────────────────
 
 export async function login(input: LoginInput): Promise<string> {
-  const response = await fetch("/api/auth/login", {
+  const response = await correlatedFetch("/api/auth/login", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -100,7 +107,7 @@ export async function login(input: LoginInput): Promise<string> {
 
 export async function register(input: RegisterInput): Promise<string> {
   // 1. Crear usuario + auto-login via API Route proxy
-  const response = await fetch("/api/auth/register", {
+  const response = await correlatedFetch("/api/auth/register", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(input),
@@ -116,7 +123,7 @@ export async function register(input: RegisterInput): Promise<string> {
 }
 
 export async function getMe(token: string): Promise<AuthUser> {
-  const response = await fetch("/api/auth/me", {
+  const response = await correlatedFetch("/api/auth/me", {
     headers: {
       Authorization: `Bearer ${token}`,
     },
@@ -126,14 +133,16 @@ export async function getMe(token: string): Promise<AuthUser> {
     throw new Error("No se pudo obtener la información del usuario.");
   }
 
-  return response.json();
+  const user: AuthUser = await response.json();
+  if (getToken() === token) telemetry.setUser(String(user.id));
+  return user;
 }
 
 export async function updateProfile(
   token: string,
   data: { name?: string | null; phone?: string | null; address?: string | null },
 ): Promise<ProfileData> {
-  const response = await fetch("/api/profiles/me", {
+  const response = await correlatedFetch("/api/profiles/me", {
     method: "PUT",
     headers: {
       "Content-Type": "application/json",
@@ -163,7 +172,7 @@ export function handleUnauthorized(): void {
 // ── Password recovery and change ─────────────────────────────────────
 
 export async function forgotPassword(email: string): Promise<void> {
-  const response = await fetch("/api/auth/forgot-password", {
+  const response = await correlatedFetch("/api/auth/forgot-password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ email }),
@@ -179,7 +188,7 @@ export async function resetPassword(
   token: string,
   newPassword: string,
 ): Promise<void> {
-  const response = await fetch("/api/auth/reset-password", {
+  const response = await correlatedFetch("/api/auth/reset-password", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ token, new_password: newPassword }),
@@ -196,7 +205,7 @@ export async function changePassword(
   currentPassword: string,
   newPassword: string,
 ): Promise<void> {
-  const response = await fetch("/api/auth/change-password", {
+  const response = await correlatedFetch("/api/auth/change-password", {
     method: "POST",
     headers: {
       "Content-Type": "application/json",

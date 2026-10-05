@@ -1,4 +1,5 @@
 import { NextResponse } from "next/server";
+import { backendFetch } from "@/lib/backend-fetch";
 
 const BACKEND_BASE_URL =
   process.env.INVENTORY_API_INTERNAL_URL ??
@@ -27,7 +28,7 @@ async function proxyInventoryRequest(request: Request, path: string[]) {
   const body = method === "GET" || method === "HEAD" ? undefined : await request.text();
 
   try {
-    const response = await fetch(targetUrl, {
+    const response = await backendFetch(request, targetUrl, {
       method,
       headers: buildHeaders(request),
       body,

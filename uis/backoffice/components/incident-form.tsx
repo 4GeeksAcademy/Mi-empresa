@@ -1,6 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { correlatedFetch } from "@/lib/http";
+import { useTelemetryWorkflow } from "@/lib/use-telemetry-workflow";
 
 interface IncidentFieldError {
   field: string;
@@ -76,6 +78,7 @@ function parseErrors(errorBody: unknown): IncidentFieldError[] {
 }
 
 export function IncidentForm() {
+  const workflow = useTelemetryWorkflow("incident_create");
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [category, setCategory] = useState("");
@@ -122,8 +125,9 @@ export function IncidentForm() {
     }
 
     setIsLoading(true);
+    workflow.submit();
     try {
-      const response = await fetch("/api/incidents", {
+      const response = await correlatedFetch("/api/incidents", {
         method: "POST",
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
@@ -137,6 +141,7 @@ export function IncidentForm() {
       });
 
       if (!response.ok) {
+        workflow.fail();
         const errorBody = await response.json() as unknown;
         const errors = parseErrors(errorBody);
         const fieldMap: Record<string, string> = {};
@@ -158,8 +163,10 @@ export function IncidentForm() {
 
       // Exito
       resetForm();
+      workflow.complete();
       setSuccessMessage("Incidencia registrada correctamente.");
     } catch {
+      workflow.fail();
       setGeneralError("No se pudo conectar con el servidor. Verifica la conexion e intentalo de nuevo.");
     } finally {
       setIsLoading(false);
@@ -188,7 +195,7 @@ export function IncidentForm() {
           </div>
         )}
 
-        <form className="mt-6 space-y-5" onSubmit={onSubmit}>
+        <form className="mt-6 space-y-5" onSubmit={onSubmit} onChange={workflow.begin}>
           {/* Titulo */}
           <div>
             <label htmlFor="title" className="block text-sm font-semibold text-slate-700">

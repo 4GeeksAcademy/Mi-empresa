@@ -15,3 +15,7 @@ El entorno completo se inicia desde la raiz con `docker compose up`. El contened
 `interfaces` ejecuta `website` en el puerto 3000 y `backoffice` en el 3001, ambos
 con recarga en caliente. Las aplicaciones usan el servicio `backend` para sus
 peticiones internas; no deben configurarse URLs `localhost` entre contenedores.
+
+El build usa contexto raiz para incluir el contrato compartido de telemetria;
+desarrollo lo monta readonly en `/docs/telemetry`. El backoffice usa un proxy
+same-origin para enviar lotes.
