@@ -12,6 +12,8 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+from sqlalchemy.dialects.postgresql import insert as postgresql_insert
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlmodel import Session
 from starlette.requests import Request
 from starlette.responses import JSONResponse
@@ -27,6 +29,7 @@ RULES = json.loads((CONTRACT_DIR / "runtime-rules.json").read_text())
 EVENTS = {event["event_type"]: event for event in CATALOG["events"]}
 if len(EVENTS) != len(CATALOG["events"]):
     raise RuntimeError("Duplicate telemetry event types")
+SERVICE_NAMES = {"frontend": "backoffice", "backend": "api"}
 TELEMETRY_ENDPOINT = os.getenv("TELEMETRY_ENDPOINT", "http://localhost:8000/telemetry/events")
 logger = logging.getLogger("trackflow.telemetry")
 context: ContextVar[dict[str, Any] | None] = ContextVar("telemetry_context", default=None)
@@ -133,32 +136,48 @@ class TelemetryBatch(BaseModel):
     events: list[Any] = Field(max_length=100)
 
 
-def receive(events: list[TelemetryEvent]) -> None:
+def receive(events: list[TelemetryEvent]) -> int:
     if not events:
-        return
+        return 0
 
-    records = [
-        TelemetryEventRecord(
-            event_id=event.eventId,
-            timestamp=datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
-            session_id=event.sessionId,
-            user_id=event.userId,
-            event_type=event.event_type,
-            schema_version=event.schemaVersion,
-            request_id=event.requestId,
-            service=EVENTS[event.event_type]["producer"],
-            tags=event.properties,
-        )
-        for event in events
-    ]
     with Session(get_engine()) as session:
         try:
-            session.add_all(records)
+            rows = [
+                {
+                    "id": UUID(event.eventId),
+                    "timestamp": datetime.fromisoformat(event.timestamp.replace("Z", "+00:00")),
+                    "service": SERVICE_NAMES[EVENTS[event.event_type]["producer"]],
+                    "event_type": event.event_type,
+                    "level": "info",
+                    "value": None,
+                    "message": None,
+                    "tags": {
+                        **event.properties,
+                        "sessionId": event.sessionId,
+                        "userId": event.userId,
+                        "schemaVersion": event.schemaVersion,
+                        "requestId": event.requestId,
+                    },
+                }
+                for event in events
+            ]
+            dialect = session.get_bind().dialect.name
+            if dialect == "postgresql":
+                insert = postgresql_insert(TelemetryEventRecord.__table__)
+            elif dialect == "sqlite":
+                insert = sqlite_insert(TelemetryEventRecord.__table__)
+            else:
+                raise RuntimeError("Unsupported telemetry database dialect")
+            result = session.execute(
+                insert.values(rows).on_conflict_do_nothing(index_elements=["id"])
+            )
             session.commit()
+            stored = result.rowcount or 0
         except Exception:
             session.rollback()
             raise
-    logger.info("received=%s event_types=%s", len(events), ",".join(event.event_type for event in events))
+    logger.info("received=%s stored=%s", len(events), stored)
+    return stored
 
 
 def emit(event_type: str, properties: dict[str, Any], user_id: str | None = None) -> None:

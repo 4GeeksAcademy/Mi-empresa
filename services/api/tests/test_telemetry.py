@@ -1,8 +1,9 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import Uuid
 from sqlalchemy.pool import StaticPool
 from sqlmodel import Session, create_engine, select
 
@@ -39,6 +40,13 @@ def stored_events(engine):
 def test_storage_schema_has_required_indexes():
     indexes = {index.name: index for index in TelemetryEventRecord.__table__.indexes}
 
+    assert set(TelemetryEventRecord.__table__.columns.keys()) == {
+        "id", "timestamp", "service", "event_type", "level", "value", "message", "tags",
+    }
+    assert isinstance(TelemetryEventRecord.__table__.c.id.type, Uuid)
+    assert TelemetryEventRecord.__table__.c.id.primary_key
+    assert str(TelemetryEventRecord.__table__.c.id.server_default.arg) == "gen_random_uuid()"
+    assert TelemetryEventRecord.__table__.c.tags.server_default is not None
     assert "ix_telemetry_events_timestamp" in indexes
     assert "ix_telemetry_events_event_type" in indexes
     assert indexes["ix_telemetry_events_tags_gin"].dialect_options["postgresql"]["using"] == "gin"
@@ -54,34 +62,85 @@ def event():
 
 
 def test_valid_batch_uses_one_bulk_insert(telemetry_database, monkeypatch):
-    original_add_all = Session.add_all
+    original_execute = Session.execute
     bulk_calls = []
 
-    def recording_add_all(session, records):
-        bulk_calls.append(list(records))
-        original_add_all(session, records)
+    def recording_execute(session, statement, *args, **kwargs):
+        bulk_calls.append(statement)
+        return original_execute(session, statement, *args, **kwargs)
 
-    monkeypatch.setattr(Session, "add_all", recording_add_all)
+    monkeypatch.setattr(Session, "execute", recording_execute)
     payload = [event(), event()]
     response = client.post("/telemetry/events", json={"events": payload})
 
     assert response.status_code == 200
     assert response.json() == {"received": 2, "stored": 2, "rejected": 0}
     assert len(bulk_calls) == 1
-    assert len(bulk_calls[0]) == 2
-    assert len(stored_events(telemetry_database)) == 2
-    assert stored_events(telemetry_database)[0].service == "frontend"
+    records = stored_events(telemetry_database)
+    assert len(records) == 2
+    first_record = next(item for item in records if item.id == UUID(payload[0]["eventId"]))
+    assert first_record.service == "backoffice"
+    assert first_record.tags["section"] == "inventory"
+    assert first_record.tags["requestId"] == payload[0]["requestId"]
+
+
+def test_duplicate_event_ids_are_not_inserted_and_count_as_rejected(telemetry_database):
+    payload = event()
+    first = client.post("/telemetry/events", json={"events": [payload]})
+    retry = client.post("/telemetry/events", json={"events": [payload, payload]})
+
+    assert first.json() == {"received": 1, "stored": 1, "rejected": 0}
+    assert retry.json() == {"received": 2, "stored": 0, "rejected": 2}
+    assert len(stored_events(telemetry_database)) == 1
+
+
+def test_backend_producer_maps_to_api_service(telemetry_database):
+    payload = event() | {
+        "event_type": "api_latency_recorded",
+        "properties": {"method": "GET", "status_code": 200},
+    }
+    response = client.post("/telemetry/events", json={"events": [payload]})
+
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
+    assert stored_events(telemetry_database)[0].service == "api"
+
+
+def test_business_dimensions_are_preserved_in_tags(telemetry_database):
+    payload = event() | {
+        "event_type": "inbound_order_created",
+        "properties": {
+            "order_id": 42,
+            "sku": "sku-abc",
+            "warehouse": "zaragoza",
+            "quantity": 3,
+        },
+    }
+
+    response = client.post("/telemetry/events", json={"events": [payload]})
+
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
+    record = stored_events(telemetry_database)[0]
+    assert record.tags == {
+        "order_id": 42,
+        "sku": "SKU-ABC",
+        "warehouse": "zaragoza",
+        "quantity": 3,
+        "sessionId": payload["sessionId"],
+        "userId": None,
+        "schemaVersion": "1.0",
+        "requestId": payload["requestId"],
+    }
 
 
 def test_mixed_batch_persists_valid_events_and_counts_invalid(telemetry_database, monkeypatch):
-    original_add_all = Session.add_all
+    original_execute = Session.execute
     bulk_calls = []
 
-    def recording_add_all(session, records):
-        bulk_calls.append(list(records))
-        original_add_all(session, records)
+    def recording_execute(session, statement, *args, **kwargs):
+        bulk_calls.append(statement)
+        return original_execute(session, statement, *args, **kwargs)
 
-    monkeypatch.setattr(Session, "add_all", recording_add_all)
+    monkeypatch.setattr(Session, "execute", recording_execute)
     response = client.post(
         "/telemetry/events",
         json={"events": [event(), event() | {"event_type": "unknown"}, 42]},
@@ -90,7 +149,6 @@ def test_mixed_batch_persists_valid_events_and_counts_invalid(telemetry_database
     assert response.status_code == 200
     assert response.json() == {"received": 3, "stored": 1, "rejected": 2}
     assert len(bulk_calls) == 1
-    assert len(bulk_calls[0]) == 1
     assert len(stored_events(telemetry_database)) == 1
 
 

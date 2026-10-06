@@ -63,12 +63,21 @@ valida cada envelope y sus allowlists de forma independiente y responde
 `200 {"received": N, "stored": M, "rejected": R}`. Los eventos validos se
 guardan juntos en una sola transaccion en `telemetry_events`; los eventos del
 backend usan el mismo receptor en proceso. El campo `service` se deriva del
-productor declarado en el catalogo y `tags` conserva `properties`.
+productor declarado en el catalogo (`frontend` -> `backoffice`, `backend` ->
+`api`). `eventId` se almacena como la PK UUID `id`; `tags` conserva `properties`
+y el resto del envelope. La tabla tiene exactamente `id`, `timestamp`, `service`,
+`event_type`, `level`, `value`, `message` y `tags`; `level` usa `info` y `value`
+`message` son nulos mientras el envelope no defina esos campos.
 
 La tabla se crea junto al esquema SQLModel al iniciar la API. Tiene indices por
 `timestamp` y `event_type`, e indice GIN sobre `tags`; la API solo expone
 insercion, no actualizacion ni borrado. Un error de persistencia revierte el lote
-y responde HTTP 500; un envelope no parseable responde HTTP 422.
+y responde HTTP 500; un envelope no parseable responde HTTP 422. Un `eventId`
+repetido no crea una fila nueva y cuenta como `rejected`; `stored` solo cuenta
+filas insertadas por primera vez. Antes de desplegar sobre una tabla existente,
+ejecutar una vez `migrations/20261006_telemetry_event_contract.sql`, ya que
+`create_all` no altera tablas creadas previamente. La migración conserva una
+copia de reintentos idénticos por `eventId` y aborta si detecta copias divergentes.
 
 Los productores backend persisten mediante el receptor comun en proceso y no
 hacen HTTP contra `TELEMETRY_ENDPOINT`. `TELEMETRY_STOCK_THRESHOLD` configura

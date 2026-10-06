@@ -1,9 +1,10 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import Column, Index, JSON, UniqueConstraint
+from sqlalchemy import Column, Float, Index, JSON, Text, UniqueConstraint, Uuid, text
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
@@ -135,13 +136,21 @@ class TelemetryEventRecord(SQLModel, table=True):
         Index("ix_telemetry_events_tags_gin", "tags", postgresql_using="gin"),
     )
 
-    id: int | None = SQLField(default=None, primary_key=True)
-    event_id: str = SQLField(max_length=36)
+    id: UUID = SQLField(
+        default_factory=uuid4,
+        sa_column=Column(Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")),
+    )
     timestamp: datetime
-    session_id: str | None = SQLField(default=None, max_length=36)
-    user_id: str | None = SQLField(default=None, max_length=36)
-    event_type: str = SQLField(max_length=100)
-    schema_version: str = SQLField(max_length=16)
-    request_id: str = SQLField(max_length=128)
     service: str = SQLField(max_length=32)
-    tags: dict = SQLField(sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    event_type: str = SQLField(max_length=100)
+    level: str = SQLField(default="info", max_length=16)
+    value: float | None = SQLField(default=None)
+    message: str | None = SQLField(default=None, sa_type=Text)
+    tags: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(
+            JSON().with_variant(JSONB, "postgresql"),
+            nullable=False,
+            server_default=text("'{}'"),
+        ),
+    )
