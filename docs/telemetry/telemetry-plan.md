@@ -115,6 +115,12 @@ Riesgos: eventos frontend/backend duplicados; pérdida durante caída del colect
 
 ## 11. Recomendaciones de implementación futura
 
+### Contrato de persistencia
+
+La tabla `telemetry_events` tiene exactamente ocho columnas: `id UUID PRIMARY KEY DEFAULT gen_random_uuid()`, `timestamp`, `service`, `event_type`, `level`, `value`, `message` y `tags JSONB NOT NULL DEFAULT '{}'`. El productor asigna `eventId` a `id`; el mapeo de servicio es `frontend` -> `backoffice` y `backend` -> `api`. `level` usa `info`, y `value`/`message` quedan nulos mientras el envelope no los defina. `tags` contiene las propiedades y los campos restantes del envelope (`sessionId`, `userId`, `schemaVersion`, `requestId`).
+
+La inserción es idempotente por `id`: un reintento con el mismo `eventId` no añade una fila. En la respuesta del receptor, `stored` cuenta solo filas nuevas y `rejected` incluye envelopes inválidos y duplicados; por tanto `received = stored + rejected`.
+
 1. Crear un productor común que valide envelope y allowlist antes de publicar.
 2. Emitir eventos de inventario y autenticación en backend, tras conocer resultado y actor.
 3. Propagar `requestId` desde UI y añadirlo a logs FastAPI.

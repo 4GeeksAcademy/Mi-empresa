@@ -1,9 +1,11 @@
 from datetime import datetime, timezone
 from enum import Enum
 from typing import List
+from uuid import UUID, uuid4
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy import UniqueConstraint
+from sqlalchemy import Column, Float, Index, JSON, Text, UniqueConstraint, Uuid, text
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
 
@@ -124,3 +126,31 @@ class OutboundOrder(SQLModel, table=True):
     user_uuid: str
 
     product: Product | None = Relationship(back_populates="outbound_orders")
+
+
+class TelemetryEventRecord(SQLModel, table=True):
+    __tablename__ = "telemetry_events"
+    __table_args__ = (
+        Index("ix_telemetry_events_timestamp", "timestamp"),
+        Index("ix_telemetry_events_event_type", "event_type"),
+        Index("ix_telemetry_events_tags_gin", "tags", postgresql_using="gin"),
+    )
+
+    id: UUID = SQLField(
+        default_factory=uuid4,
+        sa_column=Column(Uuid(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()")),
+    )
+    timestamp: datetime
+    service: str = SQLField(max_length=32)
+    event_type: str = SQLField(max_length=100)
+    level: str = SQLField(default="info", max_length=16)
+    value: float | None = SQLField(default=None)
+    message: str | None = SQLField(default=None, sa_type=Text)
+    tags: dict = SQLField(
+        default_factory=dict,
+        sa_column=Column(
+            JSON().with_variant(JSONB, "postgresql"),
+            nullable=False,
+            server_default=text("'{}'"),
+        ),
+    )

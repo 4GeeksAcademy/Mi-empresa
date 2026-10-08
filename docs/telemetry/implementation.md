@@ -2,15 +2,16 @@
 
 ## Alcance aprobado
 
-Fase temporal sin persistencia de eventos, Supabase, dashboards ni infraestructura de streaming. Se conserva el catalogo original: frontend para intencion/experiencia, backend para resultados definitivos. El desarrollador aprobo captura mixta, entrega sin durabilidad y umbral configurable inicial 10.
+Captura mixta: frontend para intencion/experiencia y backend para resultados definitivos. `POST /telemetry/events` ya persiste eventos validos en Supabase; esta fase no incluye dashboards ni infraestructura de streaming. Se conserva el catalogo original y el umbral configurable inicial 10.
 
 `runtime-rules.json` complementa el catalogo personalizado, que declara sanitizacion pero no enumera valores controlados ni rangos. Ambos validadores importan los mismos enums de dominio, codigos, rutas conocidas, version `1.0` y rangos de enteros seguros. SKU se normaliza a mayusculas y se restringe a identificadores tecnicos. El envelope acepta `requestId` como UUID; un header no UUID se reemplaza por uno generado en el backend. Se eliminan query/fragmentos, se normalizan IDs de ruta y rutas desconocidas se reducen a `/unknown`. No se agregan propiedades al catalogo.
 
 ## Receptor y productores
 
-- `POST /telemetry/events` valida un envelope cerrado de ocho campos y allowlists; acepta `{"events": [...]}` con hasta 100 eventos y responde `200 {"received": N}`. Lotes invalidos devuelven 422 sin reflejar valores originales en el error de la aplicacion.
-- El stub registra exclusivamente cantidad y tipos, sin envelopes, propiedades ni almacenamiento. Es de desarrollo, no un colector listo para internet: faltan autenticacion del productor, limites de bytes/rate y deduplicacion duradera.
-- Los productores backend validan y acumulan eventos por peticion; entregan un lote al receptor comun en proceso al finalizar la respuesta. No hacen HTTP contra su propio endpoint.
+- `POST /telemetry/events` acepta `{"events": [...]}` con hasta 100 eventos crudos, valida cada envelope cerrado de ocho campos y sus allowlists por separado, y responde `200 {"received": N, "stored": M, "rejected": R}`. Un envelope no parseable responde 422 sin reflejar valores originales; un fallo de persistencia responde 500. Un `eventId` duplicado cuenta como `rejected`; `stored` cuenta solo nuevas filas.
+- La tabla tiene ocho columnas: `id` UUID PK, `timestamp`, `service`, `event_type`, `level`, `value`, `message` y `tags`. `id` reutiliza `eventId`; el default SQL es `gen_random_uuid()`. `service` mapea explícitamente `frontend` a `backoffice` y `backend` a `api`. `level` vale `info`, `value` y `message` son nulos, y `tags` reúne las propiedades y los campos restantes del envelope.
+- Los válidos se insertan en una transacción con `ON CONFLICT DO NOTHING` por `id`, haciendo idempotentes los reintentos también frente a concurrencia. `event_type` y `timestamp` son columnas consultables; `tags` es JSONB. Hay índices B-tree para timestamp/event_type e índice GIN para tags. La API no expone actualización ni borrado de eventos.
+- La tabla `telemetry_events` se crea al iniciar el backend mediante el esquema SQLModel. `create_all` no migra tablas existentes: antes de desplegar este contrato se debe ejecutar una vez `services/api/migrations/20261006_telemetry_event_contract.sql`. La migración conserva una fila por `eventId` cuando las copias históricas son idénticas y aborta si son divergentes. El receptor común persiste tanto lotes HTTP como eventos backend en proceso; estos últimos no hacen HTTP contra su propio endpoint. El colector todavía no tiene autenticación de productor ni límites de bytes/rate.
 - Ordenes y cambios de estado se capturan despues del commit/escritura. Latencia se mide hasta enviar el ultimo bloque ASGI. Una respuesta abortada tras enviar cabeceras no ofrece confirmacion terminal fiable.
 - Los proxies Next propagan `X-Request-ID` y `X-Session-ID`; FastAPI devuelve el primero y lo incluye en el log de peticiones con ruta normalizada. El backend acepta solo UUID como correlacion; headers arbitrarios se sustituyen por UUID. Navegacion y errores independientes generan su propio request ID.
 - Un intento PUT/PATCH/DELETE sobre la ruta de productos rechazada o un campo stock/current_stock extra emite `direct_stock_edit_rejected`; no se crea una ruta de escritura ni se modifica stock fuera de ordenes trazables.
@@ -35,7 +36,7 @@ Fase temporal sin persistencia de eventos, Supabase, dashboards ni infraestructu
 | --- | --- | --- |
 | `NEXT_PUBLIC_TELEMETRY_ENDPOINT` | Backoffice, build/arranque | Default `/api/telemetry/events`, proxy same-origin; permite receptor directo |
 | `TELEMETRY_ENDPOINT` | Next servidor | URL receptor; fallback `${INCIDENTS_API_INTERNAL_URL}/telemetry/events` |
-| `TELEMETRY_ENDPOINT` | FastAPI | Leida como configuracion; default `http://localhost:8000/telemetry/events`, sin redirigir el stub |
+| `TELEMETRY_ENDPOINT` | FastAPI | Configuracion conservada; los productores backend usan el receptor en proceso y no hacen HTTP a esta URL |
 | `TELEMETRY_STOCK_THRESHOLD` | FastAPI | Entero positivo, default 10; invalido usa 10 |
 
 Arranque local del backoffice:
@@ -92,10 +93,10 @@ npm run build
 
 Pruebas de envelope, allowlists, privacidad/requestId, logs sanitizados, temporizador, lotes, cola durante envio, reintentos/IDs, beacon, deduplicacion, actor/sesion, expiracion auth, ErrorBoundary, abandono/reanudacion, 500, exclusion del receptor, ordenes, PATCH rechazado y cruce de umbral.
 
-Verificado en Chromium mediante captura de requests: login y navegacion a inventario; dos lotes reales frontend -> proxy Next -> FastAPI con 200, envelope de ocho campos, actor autenticado, requestId UUID y ausencia de email/contrasena sinteticos. La respuesta `received` coincide con los eventos recibidos.
+Verificado antes de habilitar persistencia en Chromium mediante captura de requests: login y navegacion a inventario; dos lotes reales frontend -> proxy Next -> FastAPI con 200, envelope de ocho campos, actor autenticado, requestId UUID y ausencia de email/contrasena sinteticos. El frontend solo depende del status HTTP y sigue siendo compatible con el cuerpo ampliado.
 
 Pendientes fuera de esta fase: buffer/DLQ, deduplicacion duradera, retencion/RBAC, agregados batch, percentiles p95/p99 y muestreo consciente de p99, proteccion de login por IP anonimizada con agregacion tras el limite. No se captura IP ni se inventan propiedades para contadores. Web Vitals no se incluye sin aprobar contrato.
 
-Docker: `.env` local de desarrollo creado desde valores no productivos; `docker compose config --quiet` y `docker compose build` pasan. El backend esta healthy, `/health` responde desde el host en puerto alternativo 8001, el backoffice responde 200 en puerto alternativo 3002 y `POST /telemetry/events` directo responde `{"received":0}`. Se usan puertos alternativos porque los procesos locales ocupan 3001/8000.
+Docker: `.env` local de desarrollo creado desde valores no productivos; `docker compose config --quiet` y `docker compose build` pasan. El backend esta healthy, `/health` responde desde el host en puerto alternativo 8001 y el backoffice responde 200 en puerto alternativo 3002. Se usan puertos alternativos porque los procesos locales ocupan 3001/8000.
 
 Pendiente de esta verificacion: desde `interfaces`, `http://backend:8000/health` resuelve pero termina en `UND_ERR_CONNECT_TIMEOUT`; `host.docker.internal` devuelve `EAI_AGAIN`. En auditoria, el POST desde el proxy del contenedor respondio 502 por esa limitacion, mientras que el flujo E2E en Chromium con UI y API ejecutados en host respondio 200. `.env` esta excluido por `.gitignore` y no contiene credenciales externas; su clave JWT es solo para desarrollo. Playwright y las bibliotecas Chromium se usaron temporalmente y se retiraron/restauraron sin cambiar manifests. La instalacion npm del lockfile informa 9 vulnerabilidades (8 altas y 1 critica), pendientes de evaluacion separada; no se actualizaron dependencias declaradas.

@@ -1,8 +1,13 @@
-from uuid import uuid4
+from uuid import UUID, uuid4
 
+import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from sqlalchemy import Uuid
+from sqlalchemy.pool import StaticPool
+from sqlmodel import Session, create_engine, select
 
+from models import TelemetryEventRecord
 from routes.telemetry import router
 from telemetry import normalized_route
 from telemetry import TelemetryMiddleware
@@ -10,6 +15,41 @@ from telemetry import TelemetryMiddleware
 app = FastAPI()
 app.include_router(router)
 client = TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def telemetry_database(monkeypatch):
+    engine = create_engine(
+        "sqlite://",
+        connect_args={"check_same_thread": False},
+        poolclass=StaticPool,
+    )
+    TelemetryEventRecord.__table__.create(engine)
+
+    import telemetry
+    monkeypatch.setattr(telemetry, "get_engine", lambda: engine)
+    yield engine
+    engine.dispose()
+
+
+def stored_events(engine):
+    with Session(engine) as session:
+        return session.exec(select(TelemetryEventRecord)).all()
+
+
+def test_storage_schema_has_required_indexes():
+    indexes = {index.name: index for index in TelemetryEventRecord.__table__.indexes}
+
+    assert set(TelemetryEventRecord.__table__.columns.keys()) == {
+        "id", "timestamp", "service", "event_type", "level", "value", "message", "tags",
+    }
+    assert isinstance(TelemetryEventRecord.__table__.c.id.type, Uuid)
+    assert TelemetryEventRecord.__table__.c.id.primary_key
+    assert str(TelemetryEventRecord.__table__.c.id.server_default.arg) == "gen_random_uuid()"
+    assert TelemetryEventRecord.__table__.c.tags.server_default is not None
+    assert "ix_telemetry_events_timestamp" in indexes
+    assert "ix_telemetry_events_event_type" in indexes
+    assert indexes["ix_telemetry_events_tags_gin"].dialect_options["postgresql"]["using"] == "gin"
 
 
 def event():
@@ -21,21 +61,135 @@ def event():
     }
 
 
-def test_stub_accepts_batch_and_logs_only_types(caplog):
-    with caplog.at_level("INFO", logger="trackflow.telemetry"):
-        response = client.post("/telemetry/events", json={"events": [event(), event()]})
+def test_valid_batch_uses_one_bulk_insert(telemetry_database, monkeypatch):
+    original_execute = Session.execute
+    bulk_calls = []
+
+    def recording_execute(session, statement, *args, **kwargs):
+        bulk_calls.append(statement)
+        return original_execute(session, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "execute", recording_execute)
+    payload = [event(), event()]
+    response = client.post("/telemetry/events", json={"events": payload})
+
     assert response.status_code == 200
-    assert response.json() == {"received": 2}
-    assert "backoffice_section_viewed" in caplog.text
-    assert "eventId" not in caplog.text
+    assert response.json() == {"received": 2, "stored": 2, "rejected": 0}
+    assert len(bulk_calls) == 1
+    records = stored_events(telemetry_database)
+    assert len(records) == 2
+    first_record = next(item for item in records if item.id == UUID(payload[0]["eventId"]))
+    assert first_record.service == "backoffice"
+    assert first_record.tags["section"] == "inventory"
+    assert first_record.tags["requestId"] == payload[0]["requestId"]
 
 
-def test_stub_rejects_unknown_fields_and_private_properties():
+def test_duplicate_event_ids_are_not_inserted_and_count_as_rejected(telemetry_database):
+    payload = event()
+    first = client.post("/telemetry/events", json={"events": [payload]})
+    retry = client.post("/telemetry/events", json={"events": [payload, payload]})
+
+    assert first.json() == {"received": 1, "stored": 1, "rejected": 0}
+    assert retry.json() == {"received": 2, "stored": 0, "rejected": 2}
+    assert len(stored_events(telemetry_database)) == 1
+
+
+def test_backend_producer_maps_to_api_service(telemetry_database):
+    payload = event() | {
+        "event_type": "api_latency_recorded",
+        "properties": {"method": "GET", "status_code": 200},
+    }
+    response = client.post("/telemetry/events", json={"events": [payload]})
+
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
+    assert stored_events(telemetry_database)[0].service == "api"
+
+
+def test_business_dimensions_are_preserved_in_tags(telemetry_database):
+    payload = event() | {
+        "event_type": "inbound_order_created",
+        "properties": {
+            "order_id": 42,
+            "sku": "sku-abc",
+            "warehouse": "zaragoza",
+            "quantity": 3,
+        },
+    }
+
+    response = client.post("/telemetry/events", json={"events": [payload]})
+
+    assert response.json() == {"received": 1, "stored": 1, "rejected": 0}
+    record = stored_events(telemetry_database)[0]
+    assert record.tags == {
+        "order_id": 42,
+        "sku": "SKU-ABC",
+        "warehouse": "zaragoza",
+        "quantity": 3,
+        "sessionId": payload["sessionId"],
+        "userId": None,
+        "schemaVersion": "1.0",
+        "requestId": payload["requestId"],
+    }
+
+
+def test_mixed_batch_persists_valid_events_and_counts_invalid(telemetry_database, monkeypatch):
+    original_execute = Session.execute
+    bulk_calls = []
+
+    def recording_execute(session, statement, *args, **kwargs):
+        bulk_calls.append(statement)
+        return original_execute(session, statement, *args, **kwargs)
+
+    monkeypatch.setattr(Session, "execute", recording_execute)
+    response = client.post(
+        "/telemetry/events",
+        json={"events": [event(), event() | {"event_type": "unknown"}, 42]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": 3, "stored": 1, "rejected": 2}
+    assert len(bulk_calls) == 1
+    assert len(stored_events(telemetry_database)) == 1
+
+
+def test_fully_invalid_batch_is_accepted_without_database_write(telemetry_database, monkeypatch):
+    def unexpected_add_all(*_args):
+        pytest.fail("invalid events must not be inserted")
+
+    monkeypatch.setattr(Session, "add_all", unexpected_add_all)
+    response = client.post(
+        "/telemetry/events",
+        json={"events": [event() | {"timestamp": "invalid"}, None]},
+    )
+
+    assert response.status_code == 200
+    assert response.json() == {"received": 2, "stored": 0, "rejected": 2}
+    assert stored_events(telemetry_database) == []
+
+
+def test_persistence_failure_rolls_back_batch(telemetry_database, monkeypatch):
+    def fail_commit(_session):
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(Session, "commit", fail_commit)
+    response = client.post("/telemetry/events", json={"events": [event()]})
+
+    assert response.status_code == 500
+    assert response.json() == {"detail": "Telemetry persistence failed"}
+    assert stored_events(telemetry_database) == []
+
+
+def test_invalid_events_are_rejected_individually_and_invalid_envelopes_fail():
     for change in [{"email": "secret@example.com"}, {"properties": {"section": "inventory", "password": "secret"}}, {"properties": {"section": "unknown"}}, {"event_type": "unknown"}, {"timestamp": "2026-10-03T12:00:00"}]:
         payload = event() | change
-        assert client.post("/telemetry/events", json={"events": [payload]}).status_code == 422
+        response = client.post("/telemetry/events", json={"events": [payload]})
+        assert response.status_code == 200
+        assert response.json() == {"received": 1, "stored": 0, "rejected": 1}
     assert client.post("/telemetry/events", json={"events": [], "extra": True}).status_code == 422
-    assert client.post("/telemetry/events", json={"events": [event() | {"requestId": "synthetic-person-name"}]}).status_code == 422
+    assert client.post("/telemetry/events", json={"events": "invalid"}).status_code == 422
+    assert client.post("/telemetry/events", json={"events": [event() | {"requestId": "synthetic-person-name"}]}).json() == {
+        "received": 1, "stored": 0, "rejected": 1,
+    }
 
 
 def test_routes_remove_identifiers_queries_and_unknown_text():

@@ -633,3 +633,39 @@
 - Criterios rubricados pasan en flujo host con navegador. El relay Next hace fetch server-side para reenvío, no para capturar un evento adicional.
 - La red Compose `interfaces -> backend` sigue limitada por el runtime Docker anidado; no se alteró configuración de red.
 - Vulnerabilidades npm/deprecations de dependencias existentes siguen fuera de alcance.
+
+## 2026-10-05 (Persistencia de telemetria en Supabase)
+
+### Cambios implementados
+- `services/api/models.py`: modelo SQLModel `TelemetryEventRecord` para `telemetry_events`, con campos del envelope, `service` derivado del productor, `tags` JSONB y indices para timestamp, event_type y GIN(tags).
+- `services/api/database.py`: registra el modelo en el esquema creado durante el startup existente.
+- `services/api/telemetry.py`: el receptor comun persiste eventos frontend y backend en una transaccion bulk; falla con rollback y propaga el error al endpoint. La captura backend sigue siendo best-effort desde el middleware.
+- `services/api/routes/telemetry.py`: el envelope conserva events como lista cruda, valida cada elemento con `TelemetryEvent.model_validate`, continua ante eventos invalidos y responde con received/stored/rejected.
+- `services/api/tests/test_telemetry.py`: pruebas de lotes validos, mixtos, invalidos, fallo de persistencia, insercion bulk e indices.
+- Actualizados README de services/API y `docs/telemetry/implementation.md`; sin cambios de frontend ni de configuracion protegida.
+
+### Validaciones
+- `python -m pytest -q tests/test_telemetry.py` -> 10 passed.
+- `python -m pytest -q` en `services/api` -> 73 passed.
+- Diagnosticos del editor en los archivos Python modificados -> sin errores.
+- `git diff --check` -> OK; sin cambios frontend; sin commit.
+
+### Limitaciones
+- La persistencia se probo con SQLite aislado; no se ejecuto contra Supabase remoto porque el entorno no proporciono una instancia/URL remota verificable.
+- La tabla se crea mediante `SQLModel.metadata.create_all` al iniciar la API. No se anadio logica de UPDATE/DELETE; el servicio solo ofrece insercion.
+- Permanecen avisos externos de deprecacion de Starlette/python-jose en la suite.
+
+## 2026-10-05 (Conexion del Codespace a Supabase)
+
+### Diagnostico y solucion
+- El contenedor Docker no resolvia el DNS externo: Codespaces resolvia el host del pooler y Docker no; tampoco habia salida DNS directa desde el contenedor al resolver Azure. El backend Compose quedaba unhealthy antes de completar startup.
+- La URI del `.env` conserva `pgbouncer=true`, que psycopg2 no acepta como opcion DSN. `services/api/database.py` ahora elimina solo ese parametro al construir la URL SQLAlchemy, sin modificar `.env` ni otros parametros como SSL.
+- Se anadio `services/api/tests/test_database.py` para verificar que host/puerto/sslmode se conservan y `pgbouncer` se filtra.
+- Como workaround al DNS limitado de Docker anidado, se detuvo el backend Compose y se arranco Uvicorn directamente en el host de Codespaces, donde el pooler resuelve correctamente.
+- Se creo/verifico `telemetry_events` en el proyecto Supabase configurado; tres indices confirmados. POST real de evento tecnico respondio `200 {received: 1, stored: 1, rejected: 0}` y la fila se consulto en Supabase con event_type, timestamp y tags.
+
+### Validaciones
+- `python -m pytest -q tests/test_database.py` -> 1 passed.
+- `python -m pytest -q` -> 74 passed.
+- Host -> Supabase PostgreSQL connect -> correcto; API host `/health` -> `{"status":"ok"}`.
+- El servicio API permanece ejecutandose en host en puerto 8000. El contenedor Docker queda detenido por el problema de DNS del runtime, no por la URI de la aplicacion.

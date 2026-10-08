@@ -27,5 +27,5 @@ el puerto 8000. El contenedor ejecuta FastAPI con `--reload`; su configuracion d
 desarrollo se carga desde el `.env` de la raiz.
 
 El build usa contexto raiz para incluir el contrato de telemetria; desarrollo
-lo monta readonly en `/docs/telemetry`. El receptor temporal
-`POST /telemetry/events` valida lotes sin persistirlos.
+lo monta readonly en `/docs/telemetry`. `POST /telemetry/events` valida cada
+evento individualmente y persiste los validos por lote en Supabase.
