@@ -1,5 +1,26 @@
 # Progress Log
 
+## 2026-10-08 (Reporte técnico de telemetría)
+
+### Cambios implementados
+- Añadido `services/telemetry/analysis.py` con funciones independientes para eventos por día/tipo, tasa observada de errores por código/día y latencia media por ruta/día. Consultan solo las columnas necesarias, filtran el rango `[start_date, end_date)` y los `event_type` aplicables en SQL, convierten `timestamp` a UTC y agregan con Pandas.
+- Añadido `GET /telemetry/report` con fechas ISO 8601 con zona horaria, período por defecto de siete días y caché en memoria de 60 segundos por combinación de parámetros; el endpoint resuelve una sola ventana y la comparte entre métricas.
+- Como la columna SQLModel `timestamp` es `DATETIME` sin zona, los límites del rango se convierten explícitamente a UTC-naive antes del filtro SQL; las fechas de agrupación siguen siendo UTC mediante Pandas.
+- Declarado Pandas en `pyproject.toml`/`requirements.txt`, actualizado `uv.lock` y preparado el Dockerfile para importar `services/telemetry` sin colisión con el módulo `api/telemetry.py`.
+- Documentada la fórmula de error como `api_error_recorded / api_latency_recorded` observado. La latencia exitosa se muestrea, así que esta tasa no representa la tasa total de fallos de producción.
+
+### Validaciones
+- `uv lock --check` -> OK.
+- `uv run pytest -q` en `services/api` -> 88 passed.
+- `uv run pytest tests/test_telemetry.py tests/test_telemetry_analysis.py -q` -> 24 passed.
+- `docker build -f services/Dockerfile ...` -> OK; import de `routes.telemetry` y `services.telemetry.analysis` dentro de la imagen -> OK.
+- Supabase real, solo lectura: 120 filas, 11 `event_type` distintos, timestamps entre 2026-10-05 y 2026-10-06. Las funciones devolvieron 20 grupos de volumen, 5 de error y 11 de latencia; `GET /telemetry/report` respondió HTTP 200 con esos mismos tamaños de resultado.
+- Diagnósticos de editor en módulos/rutas/tests modificados -> sin errores; `git diff --check` -> OK.
+
+### Limitaciones
+- La consulta Supabase fue agregada/de solo lectura y no modificó datos; las pruebas automatizadas de agregación usan SQLite aislado.
+- La tasa de error es de eventos observados y se ve afectada por el muestreo de latencias exitosas. Persisten dos avisos de deprecación externos de Starlette/httpx en la suite.
+
 ## 2026-10-03 (Corrección del bucle de redirección tras login)
 
 ### Problema y causa

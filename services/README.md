@@ -20,6 +20,9 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 
 > _Spanish version: [README.es.md](./README.es.md)._
 
+El análisis de eventos de telemetría de solo lectura vive en `telemetry/` y lo
+consume `GET /telemetry/report` en `api/`.
+
 ## Desarrollo con Docker
 
 El backend se inicia desde la raiz con `docker compose up` y queda disponible en
