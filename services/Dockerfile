@@ -1,7 +1,8 @@
 FROM python:3.12-slim
 
 ENV PYTHONDONTWRITEBYTECODE=1 \
-    PYTHONUNBUFFERED=1
+    PYTHONUNBUFFERED=1 \
+    PYTHONPATH=/app
 
 WORKDIR /app/api
 
@@ -10,6 +11,7 @@ RUN pip install --no-cache-dir uv \
     && uv pip install --system -r requirements.txt
 
 COPY services/api ./
+COPY services/telemetry /app/services/telemetry
 COPY docs/telemetry /docs/telemetry
 
 EXPOSE 8000

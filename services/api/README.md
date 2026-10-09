@@ -33,7 +33,7 @@ cd services/api
 python -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload --port 8000
+PYTHONPATH=../.. uvicorn main:app --reload --port 8000
 ```
 
 Desde la raiz del monorepo, la alternativa recomendada es `docker compose up`.
@@ -57,6 +57,15 @@ python seed.py
 El seed es idempotente: no duplica proveedores existentes por `nombre + pais`.
 
 ## Telemetria
+
+`GET /telemetry/report` devuelve `events_per_day`, `error_rate_by_type` y
+`latency_by_endpoint` para un período opcional (`start_date` inclusivo y
+`end_date` exclusivo, ambos ISO 8601 con zona horaria). Sin parámetros usa los
+últimos siete días hasta ahora. El informe se cachea en memoria durante 60
+segundos por combinación de parámetros. La tasa de errores divide los eventos
+`api_error_recorded` entre las observaciones `api_latency_recorded`; como las
+latencias exitosas se muestrean, no representa la tasa total de fallos de
+producción.
 
 `POST /telemetry/events` acepta `{"events": [...]}` con hasta 100 elementos,
 valida cada envelope y sus allowlists de forma independiente y responde
