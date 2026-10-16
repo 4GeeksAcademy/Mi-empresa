@@ -11,3 +11,4 @@ python-dotenv==1.1.0
 sqlmodel==0.0.42
 psycopg2-binary==2.9.13
 pandas==2.3.3
+prefect>=3,<4

@@ -28,6 +28,7 @@ from routes.profiles import router as profiles_router
 from routes.suppliers import router as suppliers_router
 from routes.users import router as users_router
 from routes.telemetry import router as telemetry_router
+from services.reporting.routes import router as reporting_router
 from pydantic import BaseModel, ConfigDict
 
 logging.basicConfig(level=logging.INFO)
@@ -124,6 +125,7 @@ app.include_router(users_router)
 app.include_router(profiles_router)
 app.include_router(inventory_router)
 app.include_router(telemetry_router)
+app.include_router(reporting_router)
 
 _last_export_csv_bytes: bytes | None = None
 

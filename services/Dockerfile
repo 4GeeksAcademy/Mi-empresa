@@ -11,7 +11,11 @@ RUN pip install --no-cache-dir uv \
     && uv pip install --system -r requirements.txt
 
 COPY services/api ./
+COPY packages /app/packages
 COPY services/telemetry /app/services/telemetry
+COPY services/reporting /app/services/reporting
+COPY data/pipelines /app/data/pipelines
+COPY data/process /app/data/process
 COPY docs/telemetry /docs/telemetry
 
 EXPOSE 8000

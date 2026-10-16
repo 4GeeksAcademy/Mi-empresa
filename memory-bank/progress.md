@@ -1,5 +1,29 @@
 # Progress Log
 
+## 2026-10-16 (Pipeline de desempeño de negocio resiliente)
+
+### Cambios implementados
+- Añadida `data/process/business_kpis.py` para calcular los cinco KPIs desde hechos operativos normalizados, deduplicar claves, usar fecha local US/ES, calcular puntualidad sobre entregas elegibles, convertir costes a EUR con FX aprobado o conservar su moneda nativa y aceptar CSAT únicamente en escala 1-5.
+- Añadido `data/pipelines/pipeline.py` con flow Prefect 3, extracción de `telemetry_events` en modo solo lectura para reconciliación, validación/deduplicación, caché de transformación, staging, publicación transaccional por partición y metadatos persistentes en `reporting.pipeline_runs`.
+- El CLI usa SQLite local cuando no hay `DATABASE_URL`; en PostgreSQL crea el esquema/tablas propuestas `reporting`. Si los conectores operativos no existen, registra disponibilidad y no publica filas ni ceros KPI inferidos.
+- Añadido `services/reporting/` con endpoints de estado, encolado de deployment Prefect y consulta KPI; estado/KPIs requieren usuario manager/admin y el disparo requiere admin. Integrado el router en FastAPI y empaquetado en Docker junto con `packages/`, dependido por imports existentes.
+- El endpoint de encolado genera el `run_id` de negocio y lo pasa al flow; el mismo identificador queda persistido en `pipeline_runs` y permite consultar status.
+- Añadidos staging persistente por run/partición, reemplazo transaccional de particiones completas (incluidas particiones vacías), leases por ventana/país con expiración, checkpoints por fuente/país y cola idempotente de reproceso. Las ejecuciones sin fuentes de negocio completas no reemplazan particiones existentes.
+- Los costes sin tasa FX aprobada se publican por moneda nativa y no se combinan entre divisas; con FX disponible se convierten a EUR. Los watermarks técnicos y de negocio se mantienen separados.
+- Añadidas pruebas focalizadas en `data/eval/test_business_kpis.py` y `services/api/tests/test_reporting.py`; documentados ejecución, endpoints, cadencia propuesta y fuentes ausentes en README.
+- Añadido Prefect 3 a `services/api/pyproject.toml`, `requirements.txt` y `uv.lock`.
+
+### Validaciones
+- `/tmp/trackflow-tools-venv/bin/uv lock --check --project services/api` -> OK.
+- Suite API y pruebas KPI -> 100 passed; aparecen avisos deprecados de Starlette/Python/SQLite y un error de logging Rich al detener el servidor Prefect temporal, con exit code 0.
+- Pruebas focalizadas de KPI/reporting -> 12 passed con `PREFECT_HOME` aislado.
+- `python data/pipelines/pipeline.py` en el entorno del proyecto -> flow `Completed`, 0 filas KPI publicadas porque faltan conectores operativos; no se escribieron eventos de telemetría.
+- Build final `docker build -f services/Dockerfile -t trackflow-api-resilience-check .` e import de `main`, tablas de control, flow y rutas reporting dentro del contenedor -> OK.
+
+### Limitaciones y siguientes pasos
+- No existen conectores autoritativos para envíos/entregas, costes, devoluciones, CSAT ni FX. La implementación no puede producir KPIs de negocio reales hasta que se definan y conecten esas fuentes.
+- Para la ejecución manual por API debe publicarse el deployment `trackflow_business_performance_flow/production` y tener un worker Prefect activo; el schedule propuesto de cinco minutos aún no está configurado.
+
 ## 2026-10-08 (Reporte técnico de telemetría)
 
 ### Cambios implementados
