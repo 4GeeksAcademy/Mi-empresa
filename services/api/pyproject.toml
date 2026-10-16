@@ -28,6 +28,7 @@ dependencies = [
     "sqlmodel>=0.0.42",
     "psycopg2-binary>=2.9.13",
     "pandas==2.3.3",
+    "prefect>=3,<4",
 ]
 
 [project.optional-dependencies]
