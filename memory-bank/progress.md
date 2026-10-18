@@ -1,5 +1,26 @@
 # Progress Log
 
+## 2026-10-18 (Parte 3: subflows, KPIs y dashboard de negocio)
+
+### Cambios implementados
+- Refactorizado `data/pipelines/pipeline.py` para coordinar subflows de extracción, transformación y carga; cada fase recibe y devuelve datos explícitos. Las transformaciones quedan separadas en tareas de envíos/entregas, costes y devoluciones/CSAT, y se conserva el task cacheado `calculate_kpis` por compatibilidad.
+- Añadido `tests/pipelines/test_pipeline.py` con cuatro pruebas aisladas en memoria: los cinco KPIs, cálculo manual de puntualidad, costes con FX, entradas malformadas y exclusión de devoluciones/CSAT inválidos.
+- Añadida `/reporting` al backoffice con filtros por período/país, etiquetas de negocio, valores diarios del endpoint protegido `GET /reporting/kpis`, período inclusivo, estados sin datos y frescura. El proxy Next conserva el JWT y delega en `services/reporting/`.
+- Documentada en `data/pipelines/PIPELINE_DESIGN.md` la señal adicional de frescura de diez minutos y la decisión de no inventar un monitor de heartbeat mientras no haya conectores operativos.
+- `telemetry_events` y `services/telemetry/analysis.py` permanecen intactos. No se añadieron fuentes ni KPIs sintéticos.
+
+### Validaciones
+- `python -m pytest tests/pipelines/test_pipeline.py` en el virtualenv temporal del proyecto -> 4 passed.
+- `services/api/tests/test_reporting.py` -> 9 passed.
+- CLI `python data/pipelines/pipeline.py` con SQLite en memoria -> `Completed`, 0 filas publicadas porque no hay conectores/fuentes operativas; subflows ejecutados sin error.
+- `npm run lint -- --no-warn-ignored` y `npm run build` en `uis/backoffice` -> OK; `/reporting` y `/api/reporting/kpis` aparecen en el build.
+- Suite completa del API -> 93 passed y 4 failed en `tests/test_telemetry_analysis.py` bajo el virtualenv Python 3.14 de este entorno; el módulo protegido `services/telemetry/analysis.py` no se modificó.
+
+### Limitaciones
+- Las fuentes operativas autoritativas siguen ausentes; el pipeline no publica KPIs reales hasta conectar TMS, finanzas, devoluciones, CSAT y FX.
+- El umbral de frescura de diez minutos sigue siendo una propuesta pendiente de aprobación; la UI lo presenta como señal visual, no como SLA.
+- Las cuatro pruebas de telemetría técnica necesitan validarse en el entorno soportado por el proyecto; fallan con el adaptador de fechas SQLModel/SQLite del virtualenv Python 3.14 disponible.
+
 ## 2026-10-16 (Pipeline de desempeño de negocio resiliente)
 
 ### Cambios implementados

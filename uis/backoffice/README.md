@@ -61,3 +61,11 @@ El modulo app importa funciones y datos desde:
 - Pruebas: `npm test -- --runInBand`; calidad: `npm run lint` y `npm run build`.
 
 Consultar [cobertura y limitaciones](../../docs/telemetry/implementation.md).
+
+## Indicadores de negocio
+
+- Ruta UI: `/reporting`.
+- Consulta `GET /api/reporting/kpis`, proxy autenticado al endpoint `GET /reporting/kpis` de `services/reporting/`.
+- Acceso para perfiles manager/admin. El período elegido en la UI incluye ambas fechas; el proxy conserva los filtros de fecha y país.
+- La página presenta los cinco KPI diarios de TrackFlow y muestra explícitamente cuando no hay filas publicadas, sin sintetizar valores.
+- La frescura se calcula desde la última actualización recibida; más de diez minutos se marca como desactualizada. Es una señal visual basada en el umbral propuesto, no un SLA aprobado.
