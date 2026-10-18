@@ -56,6 +56,32 @@ python seed.py
 
 El seed es idempotente: no duplica proveedores existentes por `nombre + pais`.
 
+## Reporting de negocio
+
+El servicio `services/reporting/` expone el pipeline ejecutivo sin modificar el
+reporte técnico:
+
+- `GET /reporting/pipeline/status?run_id=<uuid>` devuelve la última ejecución
+  o una ejecución concreta. Requiere autenticación.
+- `POST /reporting/pipeline/runs` recibe `window_start`, `window_end` exclusivo
+  y `country_codes`; encola el deployment Prefect y requiere rol admin.
+- `GET /reporting/kpis?start_date=YYYY-MM-DD&end_date=YYYY-MM-DD` consulta las
+  filas KPI de destino. `end_date` es exclusivo; admite filtros opcionales
+  `country_code` y `metric_codes`.
+
+La API requiere un deployment Prefect llamado
+`trackflow_business_performance_flow/production` (configurable mediante
+`TRACKFLOW_REPORTING_DEPLOYMENT`) y un worker activo para encolar ejecuciones.
+El pipeline se puede ejecutar en local con `uv run --project services/api
+python data/pipelines/pipeline.py`; su ventana por defecto es de siete días. El
+diseño propone refresco cada cinco minutos, pero el schedule solo está activo
+cuando se configura el deployment y su worker.
+
+Los conectores de envíos, costes, devoluciones, CSAT y FX no están presentes.
+Hasta que se conecten, el pipeline lee telemetría solo como señal de
+reconciliación y no publica valores KPI ni ceros inferidos. `GET /telemetry/report`
+y `services/telemetry/analysis.py` son independientes y permanecen intactos.
+
 ## Telemetria
 
 `GET /telemetry/report` devuelve `events_per_day`, `error_rate_by_type` y
