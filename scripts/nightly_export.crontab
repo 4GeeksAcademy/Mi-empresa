@@ -1,0 +1,9 @@
+SHELL=/bin/sh
+PATH=/usr/local/bin:/usr/bin:/bin
+TZ=UTC
+TRACKFLOW_ROOT=/opt/trackflow
+TRACKFLOW_PYTHON=/opt/trackflow/services/api/.venv/bin/python
+TRACKFLOW_LOG=/var/log/trackflow/nightly_export.log
+
+# Install only on a cron host configured in UTC; TZ above controls the process.
+30 2 * * * cd "$TRACKFLOW_ROOT" && "$TRACKFLOW_PYTHON" scripts/nightly_export.py >> "$TRACKFLOW_LOG" 2>&1

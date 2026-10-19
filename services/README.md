@@ -32,3 +32,15 @@ desarrollo se carga desde el `.env` de la raiz.
 El build usa contexto raiz para incluir el contrato de telemetria; desarrollo
 lo monta readonly en `/docs/telemetry`. `POST /telemetry/events` valida cada
 evento individualmente y persiste los validos por lote en Supabase.
+
+## Nightly orchestration (DEV-53)
+
+`job_runner.py` controls persistent `job_runs` state independently of FastAPI.
+Apply `api/migrations/20261019_job_runs.sql` before running the standalone
+`scripts/nightly_export.py`. Processing is the sole long-running exclusion
+state; a short transaction makes acquisition and per-date idempotency atomic.
+The module exposes create/acquire/finish/get operations, `has_processing_lock`
+and `has_completed_for_date`. It never replaces the ETL's `pipeline_runs`.
+`scripts/nightly_scheduler.py` uses APScheduler in its own process to launch
+the export daily at 02:30 UTC. The optional Compose `scheduler` profile starts
+that service without the API. See [operation, scheduler, tests and recovery](../scripts/README.md#dev-53-nightly-telemetry-export).
