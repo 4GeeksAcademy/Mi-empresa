@@ -184,6 +184,13 @@ Los endpoints viven en un nuevo router/servicio `services/reporting/`, independi
 - [x] Tres endpoints de `services/reporting/` tienen funciones importadas identificadas.
 - [x] Las entidades/eventos actuales se distinguen de los sistemas logísticos futuros no presentes en el monorepo.
 
+### Mejora adicional de observabilidad (Parte 3)
+
+- **Pregunta que responde:** ¿puede Dirección distinguir un KPI reciente de uno cuya última actualización está obsoleta?
+- **Implementación:** el dashboard compara `freshness` de `GET /reporting/kpis` con el umbral inicial propuesto de diez minutos y etiqueta los datos como actualizados o desactualizados.
+- **Priorización y límite:** es una señal visible de bajo riesgo basada en la marca temporal real del destino; no inventa actividad ni sustituye una alerta. El umbral sigue pendiente de aprobación y no constituye un SLA.
+- **No se añadió un monitor independiente de heartbeat por conector:** los conectores de TMS, finanzas, devoluciones, CSAT y FX no existen en el monorepo, así que no hay heartbeats reales que consultar. La concurrencia por ventana, el heartbeat del lease y la recuperación idempotente ya están implementados para las ejecuciones del pipeline.
+
 ### Decisiones pendientes de aprobación de negocio
 
 Este diseño concreta mediante propuesta las definiciones no fijadas en `CONTEXT.md`: coste de transporte como alcance de coste operativo, ventana/semántica de puntualidad, conteo de devoluciones aceptadas, CSAT 1–5 y frescura objetivo 10 min. Dirección/Operaciones/Finanzas/CX debe ratificarlas antes de implementar. También quedan por seleccionar conectores y sistema de cambio, y confirmar el feed de FX y permisos de reporting. El informe semanal de los lunes a las 07:00 sí está indicado en el contexto; se propone usar la zona `America/Los_Angeles` por la sede del CEO.

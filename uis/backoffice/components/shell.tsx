@@ -76,6 +76,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Inventario
             </Link>
             <Link
+              href="/reporting"
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Indicadores de negocio
+            </Link>
+            <Link
               href="/account/profile"
               className="ml-auto rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >

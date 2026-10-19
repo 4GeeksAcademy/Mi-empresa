@@ -322,10 +322,96 @@ def validate_and_deduplicate(batch: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-# Cache keys include validated facts; ten minutes bounds reuse of potentially stale transformations.
+# Cache keys include task inputs; ten minutes bounds reuse of potentially stale transformations.
 @task(cache_key_fn=task_input_hash, cache_expiration=timedelta(minutes=10), persist_result=True)
 def calculate_kpis(validated_batch: dict[str, Any]) -> list[dict[str, Any]]:
     return calculate_business_kpis(**validated_batch.get("business_facts", {}))
+
+
+@task(cache_key_fn=task_input_hash, cache_expiration=timedelta(minutes=10), persist_result=True)
+def calculate_shipment_delivery_kpis(
+    shipments: list[dict[str, Any]], delivery_events: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return calculate_business_kpis(shipments=shipments, delivery_events=delivery_events)
+
+
+@task(cache_key_fn=task_input_hash, cache_expiration=timedelta(minutes=10), persist_result=True)
+def calculate_carrier_cost_kpis(
+    carrier_cost_lines: list[dict[str, Any]], fx_rates: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return calculate_business_kpis(carrier_cost_lines=carrier_cost_lines, fx_rates=fx_rates)
+
+
+@task(cache_key_fn=task_input_hash, cache_expiration=timedelta(minutes=10), persist_result=True)
+def calculate_returns_csat_kpis(
+    returns: list[dict[str, Any]], csat_responses: list[dict[str, Any]]
+) -> list[dict[str, Any]]:
+    return calculate_business_kpis(returns=returns, csat_responses=csat_responses)
+
+
+@flow(name="trackflow_business_source_extraction")
+def extract_business_sources_flow(
+    window_start: date, window_end: date
+) -> dict[str, Any] | None:
+    extraction_state = extract_source_batch(
+        window_start, window_end, return_state=True
+    )
+    return extraction_state.result() if extraction_state.is_completed() else None
+
+
+@flow(name="trackflow_business_kpi_transformation")
+def transform_business_kpis_flow(batch: dict[str, Any]) -> dict[str, Any]:
+    validated = validate_and_deduplicate(batch)
+    facts = validated.get("business_facts", {})
+    metrics = [
+        *calculate_shipment_delivery_kpis(
+            facts.get("shipments", []), facts.get("delivery_events", [])
+        ),
+        *calculate_carrier_cost_kpis(
+            facts.get("carrier_cost_lines", []), facts.get("fx_rates", [])
+        ),
+        *calculate_returns_csat_kpis(
+            facts.get("returns", []), facts.get("csat_responses", [])
+        ),
+    ]
+    return {"validated_batch": validated, "metrics": metrics}
+
+
+@flow(name="trackflow_business_kpi_loading")
+def load_business_kpis_flow(
+    run_id: str,
+    window_start: date,
+    window_end: date,
+    country_codes: list[str],
+    validated_batch: dict[str, Any],
+    metrics: list[dict[str, Any]],
+) -> int:
+    if validated_batch.get("business_sources_complete") is not True:
+        return 0
+
+    partitions = _business_partitions(window_start, window_end, country_codes)
+    claim_reprocess_items(run_id, window_start, window_end, country_codes)
+    stage_reporting_partition(
+        metrics,
+        partitions,
+        validated_batch["business_watermark"],
+        run_id,
+    )
+    heartbeat_window_locks(run_id)
+    rows_written = publish_reporting_partition(run_id)
+    for source_name, cursors in validated_batch.get("source_cursors", {}).items():
+        for country, cursor in cursors.items():
+            commit_source_checkpoint(
+                source_name,
+                country,
+                cursor.get("timestamp"),
+                cursor.get("id"),
+                datetime.combine(window_end, time.min, tzinfo=timezone.utc),
+                run_id,
+            )
+    complete_reprocess_items(run_id)
+    cleanup_staging(run_id)
+    return rows_written
 
 
 def _business_partitions(window_start: date, window_end: date,
@@ -522,9 +608,14 @@ def trackflow_business_performance_flow(window_start: date | None = None,
     watermarks: dict[str, Any] = {"telemetry_events": "unavailable", "business_sources": "not_configured"}
     source_complete = False
     try:
-        extraction_state = extract_source_batch(window_start, window_end, return_state=True)
-        if extraction_state.is_completed():
-            batch = extraction_state.result()
+        extraction_state = extract_business_sources_flow(
+            window_start, window_end, return_state=True
+        )
+        extracted_batch = (
+            extraction_state.result() if extraction_state.is_completed() else None
+        )
+        if extracted_batch is not None:
+            batch = extracted_batch
         else:
             error_code = "OPTIONAL_TELEMETRY_UNAVAILABLE"
             error_message_safe = "La telemetría de contraste no estuvo disponible."
@@ -532,7 +623,8 @@ def trackflow_business_performance_flow(window_start: date | None = None,
                      "business_watermark": None, "business_facts": {},
                      "business_sources_complete": False, "source_cursors": {}}
         heartbeat_window_locks(run_id)
-        validated = validate_and_deduplicate(batch)
+        transformation = transform_business_kpis_flow(batch)
+        validated = transformation["validated_batch"]
         rows_read = validated["rows_read"]
         rows_rejected = validated["rows_rejected"]
         source_complete = validated["business_sources_complete"] is True
@@ -544,20 +636,16 @@ def trackflow_business_performance_flow(window_start: date | None = None,
             "business_watermark": (validated["business_watermark"].isoformat()
                                    if validated["business_watermark"] else None),
         }
-        metrics = calculate_kpis(validated)
+        metrics = transformation["metrics"]
         if source_complete:
-            partitions = _business_partitions(window_start, window_end, country_codes)
-            claim_reprocess_items(run_id, window_start, window_end, country_codes)
-            stage_reporting_partition(metrics, partitions, validated["business_watermark"], run_id)
-            heartbeat_window_locks(run_id)
-            rows_written = publish_reporting_partition(run_id)
-            for source_name, cursors in validated.get("source_cursors", {}).items():
-                for country, cursor in cursors.items():
-                    commit_source_checkpoint(
-                        source_name, country, cursor.get("timestamp"), cursor.get("id"),
-                        datetime.combine(window_end, time.min, tzinfo=timezone.utc), run_id)
-            complete_reprocess_items(run_id)
-            cleanup_staging(run_id)
+            rows_written = load_business_kpis_flow(
+                run_id,
+                window_start,
+                window_end,
+                country_codes,
+                validated,
+                metrics,
+            )
         state = "Completed"
     except Exception as exc:
         state = "Failed"
