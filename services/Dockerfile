@@ -14,6 +14,8 @@ COPY services/api ./
 COPY packages /app/packages
 COPY services/telemetry /app/services/telemetry
 COPY services/reporting /app/services/reporting
+COPY services/job_runner.py /app/services/job_runner.py
+COPY scripts /app/scripts
 COPY data/pipelines /app/data/pipelines
 COPY data/process /app/data/process
 COPY docs/telemetry /docs/telemetry

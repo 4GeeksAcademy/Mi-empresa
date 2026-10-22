@@ -1,5 +1,47 @@
 # Progress Log
 
+## 2026-10-19 (DEV-53: cambio a APScheduler y evaluacion final)
+
+### Cambios
+- APScheduler 3.11.2 en `scripts/nightly_scheduler.py`, proceso BlockingScheduler independiente de FastAPI que lanza el exportador como subproceso. CronTrigger explicito `30 2 * * *`, UTC; `--check` permite validar sin BD.
+- Servicio Compose opcional bajo perfil `scheduler`, sin dependencia del backend, con CSV persistente y parada con margen de 40 segundos. Dockerfile incluye scripts/job_runner; dependencias y uv.lock actualizados.
+- Se mantiene processing como unico bloqueo distribuido. max_instances=2 permite auditar la segunda instancia en BD; coalesce y misfire_grace_time=3600 no sustituyen el bloqueo ni implementan backfill automatico.
+- Documentacion y borrador de PR actualizados: APScheduler es principal; cron queda solo como alternativa no simultanea. La entrada anterior describe la fase inicial del ticket, no la decision final del scheduler.
+
+### Evidencias de evaluacion
+- `tests/pipelines/test_nightly_export.py` + `tests/pipelines/test_pipeline.py` en Python 3.14/PostgreSQL 16 desechable: 39 passed, 1 skipped (integracion real reservada a PostgreSQL, no SQLite).
+- Seis pruebas del scheduler: calendario UTC, exito/error del subproceso, disparo real de APScheduler, terminacion de hijo activo y CLI/parada SIGTERM. Concurrencia real, idempotencia, CSV/fechas, fallos y flow real siguen pasando.
+- Imagen Docker construida; `--check` dentro de la imagen Python 3.12 -> OK. Compose `config --no-env-resolution --quiet`, `uv lock --check` y `git diff --check` -> OK.
+- Ejecucion final end-to-end en imagen Docker contra PostgreSQL 16 efimero: `job_runs` completed y `reporting.pipeline_runs` Completed para `[2026-10-18, 2026-10-19)`. Se conservaron dos filas sinteticas en `data/raw/telemetry_2026-10-18.csv`; el evento de medianoche del dia siguiente fue excluido. El CSV es evidencia local no-PII, no dato productivo.
+
+### Evaluacion y limites
+- Criterios funcionales implementados y verificados localmente. No se concede activacion productiva: falta `.env` raiz/configuracion de DATABASE_URL y aplicar la migracion en despliegue; no se pidieron ni escribieron secretos.
+- El CSV conservado contiene exclusivamente eventos sinteticos de aceptacion; no es backup operativo ni procede de produccion.
+- El scheduler no se deja conectado a produccion ni se promete recuperacion automatica de fechas perdidas. SIGKILL/BD inaccesible requieren reconciliacion manual; continuan faltando fuentes de negocio para KPIs reales.
+- Sin cambios en infra/, workflows/, CONTEXT.md, company-choice.md o secretos; sin commits/PR.
+
+## 2026-10-19 (DEV-53: orquestacion nocturna independiente)
+
+### Cambios implementados
+- `scripts/nightly_export.py`: fecha UTC/TARGET_DATE, CSV atomico sin sobrescritura, subproceso del flow existente y logs con contexto por linea. El adaptador interno `--pipeline YYYY-MM-DD` pasa una ventana de un dia al flow publico sin modificar el ETL ni consumir el CSV.
+- `services/job_runner.py` y migracion `services/api/migrations/20261019_job_runs.sql`: historial pending/processing/completed/failed, indice job/fecha e indice unico parcial para processing. Adquisicion e idempotencia se coordinan en una transaccion corta sobre job_runs; el unico bloqueo durante el trabajo es processing.
+- Las omisiones se auditan como failed con motivo `omitted: ...`, sin started_at y con salida 0/INFO; no se declaran completed ni se inventa skipped.
+- Plantilla `scripts/nightly_export.crontab`: cron de usuario diario 02:30, host UTC obligatorio, rutas/entorno/log configurables. README de scripts incluye operacion, recuperacion, matriz de evaluacion y borrador de PR; README de services/API enlazan la operacion.
+- SIGTERM/SIGINT detienen el grupo del hijo y persisten failed; no se liberan automaticamente registros tras caidas duras.
+
+### Validaciones
+- Prueba inicial de transiciones e idempotencia con SQLite -> OK.
+- `tests/pipelines/test_nightly_export.py` con PostgreSQL 16 desechable y Python 3.14 -> 29 passed, 1 skipped (variante SQLite del flow real, verificada en PostgreSQL).
+- Concurrencia de dos procesos independientes, CLI desde otro directorio, flow Prefect real con ventana exacta, coexistencia job_runs/reporting.pipeline_runs y SIGTERM real con terminacion del hijo -> OK.
+- La migracion SQL se aplica en esquemas aislados de la BD local de pruebas; no se consultaron ni modificaron datos de produccion.
+- Regresion del pipeline existente `tests/pipelines/test_pipeline.py` -> 4 passed. Compilacion de los tres modulos Python, `git diff --check` y diagnosticos del editor -> OK. Contenedor PostgreSQL de pruebas retirado al terminar.
+
+### Limites y pendientes
+- Activacion de cron pendiente: no existe crontab en el contenedor. Instalar plantilla en host UTC y verificar una ejecucion programada; aplicar migracion en despliegue mediante operador autorizado.
+- SIGKILL, caida de host o BD inaccesible pueden impedir persistir failed; requieren reconciliacion manual tras confirmar que el proceso original ya no esta activo.
+- Persisten fuentes operativas ausentes en el pipeline: completar el flow no implica publicar KPIs reales. CSV es solo backup.
+- No se modificaron rutas protegidas, secretos ni pipeline; no se crearon commits ni PR.
+
 ## 2026-10-18 (Parte 3: subflows, KPIs y dashboard de negocio)
 
 ### Cambios implementados

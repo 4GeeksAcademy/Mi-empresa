@@ -51,6 +51,24 @@ services:
       start_period: 10s
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
 
+  scheduler:
+    profiles: ["scheduler"]
+    build:
+      context: .
+      dockerfile: services/Dockerfile
+    working_dir: /app
+    env_file:
+      - .env
+    environment:
+      TZ: UTC
+    command: ["python", "scripts/nightly_scheduler.py"]
+    restart: unless-stopped
+    stop_grace_period: 40s
+    volumes:
+      - ./data/raw:/app/data/raw
+    networks:
+      - trackflow-dev
+
 volumes:
   website_node_modules:
   backoffice_node_modules:

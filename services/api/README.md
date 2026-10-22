@@ -118,5 +118,14 @@ Los productores backend persisten mediante el receptor comun en proceso y no
 hacen HTTP contra `TELEMETRY_ENDPOINT`. `TELEMETRY_STOCK_THRESHOLD` configura
 el cruce de stock bajo (default 10).
 Consultar [cobertura y limitaciones](../../docs/telemetry/implementation.md).
+
+## Script nocturno independiente (DEV-53)
+
+Aplicar `migrations/20261019_job_runs.sql` antes de activar el job. Esta migracion
+crea `job_runs` e indices, sin alterar `telemetry_events` ni `pipeline_runs`.
+El script no se ejecuta dentro de FastAPI ni necesita levantar la API.
+APScheduler se ejecuta en `scripts/nightly_scheduler.py`, en un proceso aparte
+y sin hooks de FastAPI. El perfil Compose `scheduler` arranca solo ese servicio.
+Consultar [operacion, scheduler y pruebas](../../scripts/README.md#dev-53-nightly-telemetry-export).
 Los `requestId` recibidos se limitan a UUID; errores internos se registran con
 ruta normalizada y tipo de excepción, sin mensaje ni stack.
