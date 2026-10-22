@@ -1,5 +1,25 @@
 # Progress Log
 
+## 2026-10-22 (DEV-55: cola asíncrona Redis y Celery)
+
+### Cambios implementados
+- Redis 7.4 con AOF, `noeviction` y volumen persistente; API, worker y Flower comparten `REDIS_URL` en Compose. Flower expone el puerto 5555.
+- `POST /api/incidents/analyze` guarda el CSV en volumen compartido, encola solo el identificador y devuelve HTTP 202. `GET /tasks/{task_id}` informa estados Celery y resultado para el propietario; la exportación sigue disponible entre procesos.
+- Worker Celery independiente con ACK tardío, recuperación ante pérdida del worker, timeout, tres intentos totales con backoff de 2 y 4 segundos, y DLQ SQLite persistente con id, intento, error y timestamp. Logs incluyen duración y estado.
+- Documentados arranque/parada, comprobaciones, envío de tareas y observación en Flower en `services/api/README.md`.
+
+### Validaciones
+- `tests/test_tasks.py` dentro de la imagen Docker de Python 3.12, SQLite temporal y archivos de auth aislados: 14 passed, 1 skipped. El omitido es la prueba Docker integral, habilitada por separado.
+- Prueba Docker integral habilitada con `DEV55_DOCKER_TEST=1` y `DEV55_HOST_NETWORK=1`: 1 passed. Latencia de encolado 116.31 ms para 200,000 filas; estado `pending` y luego `started`/`success`; Redis reiniciado sin perder el mensaje; worker completó con FastAPI detenido; otro CSV alcanzó `failure` y quedó en DLQ al intento 3.
+- Flower devolvió una tarea `SUCCESS` y otra `FAILURE`; el worker registró reintentos, identificadores, duración y fallo. `docker compose config` y build de la imagen se habían validado en la fase anterior.
+- Captura de la tabla real de Flower: `audit/after/DEV-55-flower.png`. La fila fallida coincide con la DLQ persistida; el log de demostración muestra `countdown=2`, `countdown=4` y el tercer intento fallido.
+- `git diff --check` -> OK.
+
+### Límites
+- El daemon Docker de este entorno no permite la conectividad entre contenedores en una red bridge de prueba. El ciclo integral pasó compartiendo REDIS_URL mediante red host y Redis con puerto publicado fijo; la resolución `redis:6379` en la red bridge normal de Compose no se pudo verificar en runtime aquí.
+- Las pruebas locales fuera de la imagen no pueden recolectarse con el Python activo por ausencia de Celery; se ejecutaron dentro de la imagen de servicio con sus dependencias y configuración temporal.
+- No se modificaron rutas protegidas, secretos, `infra/` ni `workflows/`; no se hicieron commits.
+
 ## 2026-10-19 (DEV-53: cambio a APScheduler y evaluacion final)
 
 ### Cambios
