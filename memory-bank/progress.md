@@ -1,5 +1,12 @@
 # Progress Log
 
+## 2026-10-28 (Evaluación técnica del modelo de ventas)
+
+- `scripts/evaluate_regression_model.py`: CV temporal (5 folds, ventanas de 12 meses) sobre train 2016-2023, features reconstruidas por fold, curva de aprendizaje en `data/eval/`, reporte en `data/eval/evaluation_report.md`. El test 2024-2025 no se usa.
+- Diagnóstico: overfitting moderado (RMSE train 19.8k vs val 48.7k a 12 meses y 45.2k a 1 mes; train por debajo del ruido estimado ±5%). Métrica principal: RMSE (penaliza errores grandes en picos); MAE secundaria.
+- Acción propuesta, no aplicada: `min_samples_leaf=4` y `max_features=0.5` (val 1m 45.1k vs 45.2k, train 29k). `leaf=8` ya empeora la validación. La diferencia de validación no es significativa con 5 folds.
+- Test `tests/pipelines/test_cv_chronological.py`: 3 passed. El ruido irreducible es una estimación a partir del briefing; el coste asimétrico sobre/subestimar es una inferencia.
+
 ## 2026-10-28 (Modelo de predicción de ventas)
 
 - `scripts/sales_forecast.py`: Random Forest (seed 42) sobre `revenue_eur` consolidado, split temporal 2016-2023 / 2024-2025, features causales escala-libres, pronóstico recursivo, banda P10-P90 entre árboles. Gráfico en `docs/sales_forecast.png`.
