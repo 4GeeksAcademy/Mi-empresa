@@ -1,5 +1,13 @@
 # Progress Log
 
+## 2026-10-28 (Modelo de predicción de ventas)
+
+- `scripts/sales_forecast.py`: Random Forest (seed 42) sobre `revenue_eur` consolidado, split temporal 2016-2023 / 2024-2025, features causales escala-libres, pronóstico recursivo, banda P10-P90 entre árboles. Gráfico en `docs/sales_forecast.png`.
+- Decisiones: K2 asumido como R²; Gini normalizado sobre el ranking de predicciones; PSI sobre scores train vs test (5 cuantiles). Sin features contemporáneas de envíos (fuga).
+- Test: MSE 2.017e9 (RMSE 44.9k EUR), MAPE 2.51%, Gini 0.968, K2 0.931, PSI 1.62.
+- Riesgo: PSI alto (>0.25) porque el pronóstico recursivo suaviza los scores respecto al train; no se ha ajustado para bajarlo. Definiciones de K2/Gini/PSI pendientes de confirmar con el curso.
+- Tests: `tests/pipelines/test_sales_split.py` 2 passed. Dependencias añadidas con uv.
+
 ## 2026-10-22 (DEV-55: cola asíncrona Redis y Celery)
 
 ### Cambios implementados

@@ -7,6 +7,17 @@ This folder contains **helper scripts** for the monorepo: development automation
 
 > _Spanish version: [README.es.md](./README.es.md)._
 
+## Sales forecast model (`sales_forecast.py`)
+
+Run: `uv run python scripts/sales_forecast.py` (seed 42; writes `docs/sales_forecast.png`). Test: `uv run pytest tests/pipelines/test_sales_split.py`.
+
+- **Data/split**: `data/raw/trackflow_sales.csv` (`consolidated`, target `revenue_eur`). Train 2016-2023 (96 months), test 2024-2025 (24 months), temporal cut.
+- **Features** (causal, scale-free, divided by revenue 12 months earlier): lags 1-3, rolling mean/std (3) and mean (12), month sin/cos, Nov-Dec and Feb flags. Same-month `shipments_processed` and `avg_revenue_per_shipment_eur` are excluded (they leak the target). No scaling is needed: trees are invariant to it and features are already ratios.
+- **Model**: Random Forest. With 84 training rows it is stable without tuning, explainable (feature importances) and tree dispersion gives the variability band. XGBoost would be preferred with more data and time to tune. Target is the YoY ratio so the model can extrapolate growth beyond the train range.
+- **Forecast**: recursive; test values are never used as inputs.
+- **Metrics on test**: MSE/RMSE (average squared/typical error in EUR; a low MSE alone does not say if the error is small relative to revenue, if peaks are ranked right or if the model is stable, hence MAPE, Gini, K2 and PSI), PSI (shift between model score distributions in train and test; >0.25 means notable drift), normalized Gini (does the model rank high-revenue months above low ones; 1 = perfect), K2 (assumed to be R², share of variance explained).
+- **Band**: P10-P90 across trees; it reflects model dispersion, not a full prediction interval.
+
 ## DEV-53: nightly telemetry export
 
 `nightly_export.py` is a standalone process, not a FastAPI background task. Install
