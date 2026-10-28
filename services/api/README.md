@@ -6,7 +6,9 @@ Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
 
 - `POST /api/incidents/analyze`
   - Request: `multipart/form-data` con campo `file` (CSV)
-  - Response: resumen JSON con metricas e invalidos por tipo
+  - Response: HTTP 202 con `{"task_id": "..."}`; el analisis se ejecuta en el worker
+- `GET /tasks/{task_id}`
+  - Response: `task_id`, estado (`pending`, `started`, `success`, `failure`) y resultado disponible
 - `GET /api/incidents/results/export`
   - Response: descarga de `results.csv` del ultimo analisis
 - `POST /suppliers`
@@ -25,6 +27,59 @@ Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
   - Response: proveedor actualizado
 - `DELETE /suppliers/{id}`
   - Response: confirmacion de borrado
+
+## Cola de tareas (DEV-55)
+
+Redis es el broker y backend de resultados de Celery. API, worker y Flower leen
+la misma `REDIS_URL`; Compose usa `redis://redis:6379/0`. Los CSV y resultados
+se guardan en el volumen compartido `task_data`, y los fallos terminales en una
+DLQ SQLite persistente. El mensaje de Celery contiene solo el `task_id`.
+
+Desde la raiz del monorepo, iniciar y comprobar los servicios:
+
+```bash
+docker compose up -d redis backend worker flower
+docker compose ps
+docker compose exec redis redis-cli ping
+```
+
+La API escucha en `http://localhost:8000` y Flower en
+`http://localhost:5555`. Detener o reanudar un proceso por separado:
+
+```bash
+docker compose stop backend     # el worker sigue procesando
+docker compose start backend
+docker compose stop worker      # la API sigue disponible
+docker compose up -d worker
+docker compose logs -f worker
+```
+
+El endpoint requiere un token Bearer valido. Define `TOKEN` con un JWT obtenido
+por el flujo de autenticacion existente. Para demostrar una tarea completada y
+otra fallida:
+
+```bash
+printf 'incident_id,category,status,satisfaction_score\nI-1,tracking,cerrado,5\n' > /tmp/dev55-ok.csv
+curl -sS -H "Authorization: Bearer $TOKEN" -F file=@/tmp/dev55-ok.csv http://localhost:8000/api/incidents/analyze
+```
+
+La respuesta incluye `task_id`; consultar su estado y resultado con:
+
+```bash
+curl -sS -H "Authorization: Bearer $TOKEN" http://localhost:8000/tasks/<task_id>
+```
+
+Para observar la DLQ tras tres fallos consecutivos (dos reintentos, con esperas
+de 2 y 4 segundos), enviar un CSV con cabecera invalida:
+
+```bash
+printf 'wrong,header\n1,2\n' > /tmp/dev55-fail.csv
+curl -sS -H "Authorization: Bearer $TOKEN" -F file=@/tmp/dev55-fail.csv http://localhost:8000/api/incidents/analyze
+```
+
+Flower muestra tareas encoladas, en ejecucion, completadas y fallidas en su
+dashboard. Los logs del worker incluyen `task_id`, intento, estado, duracion y,
+si falla, el error. El worker es un proceso Compose independiente de FastAPI.
 
 ## Run local
 

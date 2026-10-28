@@ -1,12 +1,13 @@
 from __future__ import annotations
 
-import csv
 import io
+import json
 import logging
 import time
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import Literal
+from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -20,7 +21,11 @@ from telemetry import TelemetryMiddleware, context, emit, normalized_route
 
 from auth import get_current_user
 from database import init_inventory_db
-from incidents import CsvFormatError, analyze_incidents_csv
+from kombu.exceptions import OperationalError
+from redis.exceptions import RedisError
+from services.celery_app import app as celery_app
+from services.incident_tasks import analyze_incidents_task
+from services import task_store
 from routes.auth import router as auth_router
 from routes.incidents import router as incidents_router
 from routes.inventory import router as inventory_router
@@ -127,20 +132,24 @@ app.include_router(inventory_router)
 app.include_router(telemetry_router)
 app.include_router(reporting_router)
 
-_last_export_csv_bytes: bytes | None = None
-
-
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     status: str
 
 
-class IncidentAnalysisResponse(BaseModel):
+class TaskAcceptedResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
-    filename: str
-    summary: dict[str, object]
+    task_id: str
+
+
+class TaskStatusResponse(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    task_id: str
+    status: Literal["pending", "started", "success", "failure"]
+    result: dict | None = None
 
 
 @app.get("/health", response_model=HealthResponse)
@@ -148,57 +157,63 @@ def health() -> HealthResponse:
     return HealthResponse(status="ok")
 
 
-@app.post("/api/incidents/analyze", response_model=IncidentAnalysisResponse)
-async def analyze_incidents(
+@app.post("/api/incidents/analyze", response_model=TaskAcceptedResponse, status_code=202)
+def analyze_incidents(
     file: UploadFile = File(...),
     current_user: dict = Depends(get_current_user),
-) -> IncidentAnalysisResponse:
-    global _last_export_csv_bytes
-
+) -> TaskAcceptedResponse:
     if not file.filename:
         raise HTTPException(status_code=400, detail="Debes adjuntar un fichero CSV.")
 
-    raw = await file.read()
-    if not raw:
-        raise HTTPException(status_code=400, detail="El fichero CSV esta vacio.")
-
+    task_id = str(uuid4())
     try:
-        csv_text = raw.decode("utf-8-sig")
-    except UnicodeDecodeError as exc:
-        raise HTTPException(
-            status_code=400,
-            detail="No se pudo decodificar el CSV. Usa UTF-8.",
-        ) from exc
-
-    try:
-        result = analyze_incidents_csv(csv_text)
-    except CsvFormatError as exc:
+        task_store.create_upload(task_id, str(current_user["id"]), file.filename, file.file)
+    except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
-    except csv.Error as exc:
+    try:
+        analyze_incidents_task.apply_async(args=[task_id], task_id=task_id)
+    except (OperationalError, RedisError, OSError) as exc:
+        logger.error("task_id=%s state=publish_unknown error_type=%s", task_id, type(exc).__name__)
         raise HTTPException(
-            status_code=400,
-            detail="El formato del CSV no es valido.",
+            status_code=503,
+            detail={"task_id": task_id, "message": "No se pudo confirmar el encolado."},
         ) from exc
+    return TaskAcceptedResponse(task_id=task_id)
 
-    buffer = io.StringIO()
-    writer = csv.writer(buffer)
-    writer.writerow(["metric", "value"])
-    for metric, value in result.to_metrics_rows():
-        writer.writerow([metric, value])
 
-    _last_export_csv_bytes = buffer.getvalue().encode("utf-8")
-
-    return IncidentAnalysisResponse(
-        filename=file.filename,
-        summary=result.to_json(),
-    )
+@app.get("/tasks/{task_id}", response_model=TaskStatusResponse)
+def task_status(
+    task_id: UUID,
+    current_user: dict = Depends(get_current_user),
+) -> TaskStatusResponse:
+    identifier = str(task_id)
+    job = task_store.get_job(identifier)
+    if job is None or job["owner"] != str(current_user["id"]):
+        raise HTTPException(status_code=404, detail="Tarea no encontrada.")
+    if job["result"] is not None:
+        return TaskStatusResponse(task_id=identifier, status="success", result=json.loads(job["result"]))
+    if task_store.get_failure(identifier):
+        return TaskStatusResponse(task_id=identifier, status="failure")
+    try:
+        result = celery_app.AsyncResult(identifier)
+        state = result.state
+        status = {
+            "PENDING": "pending", "RECEIVED": "pending", "RETRY": "pending",
+            "STARTED": "started", "SUCCESS": "success", "FAILURE": "failure",
+            "REVOKED": "failure",
+        }.get(state, "pending")
+        payload = result.result if state == "SUCCESS" else None
+    except (RedisError, OperationalError) as exc:
+        raise HTTPException(status_code=503, detail="Estado temporalmente no disponible.") from exc
+    return TaskStatusResponse(task_id=identifier, status=status, result=payload)
 
 
 @app.get("/api/incidents/results/export", response_model=None)
 def export_last_result(
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
-    if _last_export_csv_bytes is None:
+    export = task_store.latest_export()
+    if export is None:
         raise HTTPException(
             status_code=404,
             detail="No hay resultados disponibles. Ejecuta primero /api/incidents/analyze.",
@@ -206,7 +221,7 @@ def export_last_result(
 
     emit("report_exported", {"report_type": "incident_analysis", "format": "csv"})
     return StreamingResponse(
-        io.BytesIO(_last_export_csv_bytes),
+        io.BytesIO(export),
         media_type="text/csv",
         headers={"Content-Disposition": "attachment; filename=results.csv"},
     )

@@ -27,22 +27,28 @@ services:
     command: ["bash", "/app/start.sh"]
 
   backend:
-    build:
+    build: &api-build
       context: .
       dockerfile: services/Dockerfile
-    working_dir: /app/api
+    working_dir: /app/services/api
     env_file:
       - .env
     environment:
-      PYTHONPATH: /app:/app/api
+      PYTHONPATH: /app:/app/services/api
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      TASK_DATA_DIR: /var/lib/trackflow/tasks
     ports:
       - "${BACKEND_PORT:-8000}:8000"
     volumes:
-      - ./services:/app
+      - ./services:/app/services
       - ./packages:/app/packages:ro
       - ./docs/telemetry:/docs/telemetry:ro
+      - task_data:/var/lib/trackflow/tasks
     networks:
       - trackflow-dev
+    depends_on:
+      redis:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 5s
@@ -50,6 +56,59 @@ services:
       retries: 12
       start_period: 10s
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  redis:
+    image: redis:7.4-alpine
+    command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always", "--maxmemory-policy", "noeviction"]
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - trackflow-dev
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 12
+
+  worker:
+    build: *api-build
+    working_dir: /app/services/api
+    environment:
+      PYTHONPATH: /app:/app/services/api
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      TASK_DATA_DIR: /var/lib/trackflow/tasks
+    command: ["celery", "-A", "services.celery_app", "worker", "--loglevel=INFO", "--concurrency=2", "--events"]
+    volumes:
+      - ./services:/app/services
+      - ./packages:/app/packages:ro
+      - task_data:/var/lib/trackflow/tasks
+    networks:
+      - trackflow-dev
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    stop_grace_period: 330s
+
+  flower:
+    build: *api-build
+    working_dir: /app/api
+    environment:
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      FLOWER_UNAUTHENTICATED_API: "true"
+    command: ["celery", "-A", "services.celery_app", "flower", "--port=5555", "--persistent=True", "--db=/var/lib/flower/flower"]
+    ports:
+      - "5555:5555"
+    volumes:
+      - flower_data:/var/lib/flower
+    networks:
+      - trackflow-dev
+    depends_on:
+      redis:
+        condition: service_healthy
 
   scheduler:
     profiles: ["scheduler"]
@@ -72,6 +131,9 @@ services:
 volumes:
   website_node_modules:
   backoffice_node_modules:
+  redis_data:
+  task_data:
+  flower_data:
 
 networks:
   trackflow-dev:
