@@ -18,6 +18,13 @@ Run: `uv run python scripts/sales_forecast.py` (seed 42; writes `docs/sales_fore
 - **Metrics on test**: MSE/RMSE (average squared/typical error in EUR; a low MSE alone does not say if the error is small relative to revenue, if peaks are ranked right or if the model is stable, hence MAPE, Gini, K2 and PSI), PSI (shift between model score distributions in train and test; >0.25 means notable drift), normalized Gini (does the model rank high-revenue months above low ones; 1 = perfect), K2 (assumed to be R², share of variance explained).
 - **Band**: P10-P90 across trees; it reflects model dispersion, not a full prediction interval.
 
+## Regression model evaluation (`evaluate_regression_model.py`)
+
+Run: `uv run python scripts/evaluate_regression_model.py`. Test: `uv run pytest tests/pipelines/test_cv_chronological.py`. Outputs and diagnosis are in `data/eval/` (`evaluation_report.md`, `learning_curve.png`, CSVs).
+
+- Temporal CV (`TimeSeriesSplit`, 5 folds, 12-month validation windows) on the 2016-2023 train only; features are rebuilt per fold from that fold's training rows, and validation is a recursive forecast.
+- Reports MAE/RMSE for train and validation as mean ± std, a learning curve, and a small hyperparameter comparison run with the same CV.
+
 ## DEV-53: nightly telemetry export
 
 `nightly_export.py` is a standalone process, not a FastAPI background task. Install
