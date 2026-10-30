@@ -36,6 +36,7 @@ services:
     environment:
       PYTHONPATH: /app:/app/services/api
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
+      QDRANT_URL: ${QDRANT_DOCKER_URL:-http://qdrant:6333}
       TASK_DATA_DIR: /var/lib/trackflow/tasks
     ports:
       - "${BACKEND_PORT:-8000}:8000"
@@ -49,6 +50,8 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+      qdrant:
+        condition: service_started
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health')"]
       interval: 5s
@@ -72,6 +75,17 @@ services:
       interval: 5s
       timeout: 3s
       retries: 12
+
+  qdrant:
+    image: qdrant/qdrant:v1.15.4
+    ports:
+      - "6333:6333"
+      - "6334:6334"
+    volumes:
+      - qdrant_data:/qdrant/storage
+    networks:
+      - trackflow-dev
+    restart: unless-stopped
 
   worker:
     build: *api-build
@@ -134,6 +148,7 @@ volumes:
   redis_data:
   task_data:
   flower_data:
+  qdrant_data:
 
 networks:
   trackflow-dev:
