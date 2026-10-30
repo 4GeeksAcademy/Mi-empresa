@@ -8,10 +8,13 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
+    "markdown-it-py>=4.2.0",
     "matplotlib>=3.11.2",
     "numpy>=2.5.4",
+    "openai>=3.40.0",
     "pandas>=3.1.0",
     "pytest>=9.2.0",
+    "qdrant-client>=1.15,<1.17",
     "scikit-learn>=1.9.1",
     "xgboost>=3.4.1",
 ]
