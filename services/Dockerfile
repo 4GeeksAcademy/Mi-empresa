@@ -14,12 +14,14 @@ COPY services/api ./
 COPY packages /app/packages
 COPY services/telemetry /app/services/telemetry
 COPY services/reporting /app/services/reporting
+COPY services/knowledge /app/services/knowledge
 COPY services/job_runner.py /app/services/job_runner.py
 COPY services/celery_app.py services/incident_tasks.py services/task_store.py /app/services/
 COPY scripts /app/scripts
 COPY data/pipelines /app/data/pipelines
 COPY data/process /app/data/process
 COPY docs/telemetry /docs/telemetry
+COPY docs/company-knowledge-base /app/docs/company-knowledge-base
 
 EXPOSE 8000
 

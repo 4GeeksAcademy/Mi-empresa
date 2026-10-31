@@ -1,5 +1,39 @@
 # Progress Log
 
+## 2026-10-30 (auditoría de aceptación RAG)
+
+- Se auditó la lista de aceptación contra la implementación, los documentos fuente, el briefing, los tests y el pipeline de `data/pipelines/`. El endpoint reutiliza `services.knowledge.pipeline`, que es el módulo correcto de RAG; `data/pipelines/pipeline.py` es un flujo Prefect/SQL separado para KPIs y no debe importarse en la API de preguntas.
+- `data/eval/test-queries.json` pasó de 8 a 11 preguntas. Se mantiene cobertura de los cuatro documentos y la consulta sobre Black Friday/Rebajas; se añadieron casos de inventario de larga duración, aprobación de excepciones de transportista y responsabilidad por daño en tránsito.
+- La evaluación live contra Qdrant/proveedor tras ampliar el dataset dio Recall@3 **11/11 = 1.00**, superior a 0.80. No se modificó ni limpió la colección/volumen.
+- Se agregó una prueba del prompt de generación que verifica la instrucción explícita de reconocer ausencia de evidencia y se añadió justificación de chunking, modelo de embeddings dedicado/dimensión dinámica, cosine y límite provisional 0.35 a `docs/rag/rag-design.md`.
+- Validaciones: preview de corpus 14 chunks; tests pipeline 6 passed; tests API 2 passed (un warning de deprecación Starlette/AnyIO); Recall@3 11/11; `git diff --check` OK; Pylance sin errores en pipeline, tests y ruta API.
+- El entorno root no tiene FastAPI; por ello los tests RAG y API se ejecutaron en sus entornos de proyecto separados. La auditoría de entrega también alineó `services/api/requirements.txt` con `qdrant-client>=1.15,<1.17`, coherente con el servidor 1.15.4 y los manifests/lock. No se inspeccionó `.env` ni se imprimieron valores. Sin commits ni PR.
+
+## 2026-10-30 (RAG: indexación y evaluación real)
+
+- El reintento de embeddings funcionó (vector 1024D); se indexaron los 14 chunks del corpus de cuatro documentos en la colección Qdrant `trackflow_knowledge`.
+- Recall@3 real sobre las 8 preguntas evaluables: 8/8 = 1.00 (objetivo >=0.80). Consulta real sobre devoluciones internacionales generó respuesta en español con cita y preservó el requisito de gestión manual.
+- Qdrant Server es 1.15.4. El cliente 1.20 produjo advertencia de incompatibilidad; se fijó el rango `qdrant-client>=1.15,<1.17` (1.16.2) en proyecto raíz y API. Volver a ejecutar indexación/evaluación tras cambiar la versión.
+- Documentación actualizada en `docs/rag/rag-design.md` y `services/knowledge/README.md`. Pendiente recomendado: ampliar casos de evaluación (inglés/sin evidencia), revisión comercial continua y comprobación de conectividad desde la red backend Compose. No hubo commit ni PR.
+
+## 2026-10-28 (RAG: implementación y validación parcial)
+
+- Implementados chunking/indexación en `services/knowledge/indexing.py`, recuperación y generación en `pipeline.py`, endpoint autenticado `POST /knowledge/query`, proxy y página `/knowledge` del backoffice, colección Qdrant de desarrollo en Compose, ocho consultas de evaluación y script Recall@3. El briefing no se indexa; las fuentes son los cuatro documentos comerciales.
+- Corpus: 14 chunks semánticos (SLA 3, devoluciones 5, transportistas 3, almacenamiento 3), verificados en vista previa. Indexación repetible, payloads y borrado de IDs obsoletos comprobados con Qdrant en memoria y embeddings simulados.
+- Pruebas Python focalizadas: pipeline 5 passed; API 2 passed. Frontend: ESLint OK; Jest 4 suites / 15 tests passed. `docker compose config --quiet` OK.
+- Variables RAG presentes al cargar `.env` raíz (no se mostraron sus valores). La llamada al proveedor de embeddings devuelve HTTP 403 `PermissionDeniedError`; por ello no se ha indexado en el Qdrant real ni se ha probado generación real o medido Recall@3. Se inició el servicio Qdrant de Compose, pero falta confirmar conectividad desde el entorno Python de proyecto.
+- Diseño documentado en `docs/rag/rag-design.md`, con limitaciones y comandos de evaluación. El umbral 0.35 sigue provisional; el criterio de Recall@3 >= 0.80 está pendiente de evaluación real. No declarar completado el hito hasta probar servicios, respuesta representativa y evaluación en vivo. Sin commits ni PR.
+
+## 2026-10-28 (RAG: fase 1, preparacion e indexacion)
+
+- Aniadido `services/knowledge/indexing.py` con `prepare_chunks()`, `embed()` y `setup()`. Se usa esta ubicacion alternativa porque Copilot deniega leer el README local de `data/process/`; no se alteraron las exclusiones.
+- Corpus limitado a los cuatro documentos comerciales del briefing; el propio briefing no se indexa. Coleccion `trackflow_knowledge`, payloads con nombres exactos, UUIDs deterministas y limpieza de puntos obsoletos tras upsert correcto.
+- Chunking por bloques Markdown completos, listas con introduccion y secciones: 14 chunks (SLA 3, devoluciones 5, transportistas 3, almacenamiento 3), de 138 a 532 caracteres. Dimension inferida desde embeddings reales; metrica coseno.
+- Dependencias raiz aniadidas con `uv add`: qdrant-client, openai y markdown-it-py. Configuracion de modelos mediante variables de entorno, IDs distintos y sin secretos escritos.
+- Verificado: preview del corpus real, preservacion textual, metadatos, IDs deterministas, setup repetido sin duplicados y eliminacion de un punto obsoleto mediante Qdrant en memoria y embeddings simulados. Sin errores de editor.
+- Pendiente: confirmar compatibilidad OpenAI del proveedor 4Geeks, configurar modelos y conexion, indexar realmente y medir dimension/calidad. Las variables RAG y QDRANT_URL no estaban presentes en el entorno del proceso. No se inspeccionaron archivos secretos.
+- Fases siguientes no implementadas: recuperacion/generacion, API, UI, tests persistentes, Recall@3 real y documento final de diseno. Hito no completado; sin commits ni PR.
+
 ## 2026-10-28 (Evaluación técnica del modelo de ventas)
 
 - `scripts/evaluate_regression_model.py`: CV temporal (5 folds, ventanas de 12 meses) sobre train 2016-2023, features reconstruidas por fold, curva de aprendizaje en `data/eval/`, reporte en `data/eval/evaluation_report.md`. El test 2024-2025 no se usa.
