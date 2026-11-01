@@ -1,0 +1,159 @@
+[
+  {
+    "trace_id": "11111111-1111-4111-8111-111111111111",
+    "status": "completed",
+    "question": "¿Las devoluciones internacionales son automáticas?",
+    "answer": "Las devoluciones internacionales requieren gestión manual del equipo de Sofía Ramos. [returns-policy | Política de Devoluciones]",
+    "origin": "synthetic_test_fixture",
+    "nodes": [
+      {
+        "order": 1,
+        "node": "receive",
+        "status": "completed",
+        "input": {"question": "¿Las devoluciones internacionales son automáticas?"},
+        "output": {
+          "question": "¿Las devoluciones internacionales son automáticas?",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "retrieve"
+        }
+      },
+      {
+        "order": 2,
+        "node": "retrieve",
+        "status": "completed",
+        "input": {
+          "question": "¿Las devoluciones internacionales son automáticas?",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "retrieve"
+        },
+        "output": {
+          "context": [
+            {
+              "company": "trackflow",
+              "source_document": "returns-policy",
+              "section": "Política de Devoluciones",
+              "language": "es",
+              "chunk_index": 0,
+              "text": "Las devoluciones internacionales no están cubiertas por el proceso automático estándar y requieren gestión manual del equipo de Sofía Ramos."
+            }
+          ],
+          "route": "generate"
+        }
+      },
+      {
+        "order": 3,
+        "node": "generate",
+        "status": "completed",
+        "input": {
+          "question": "¿Las devoluciones internacionales son automáticas?",
+          "context": [
+            {
+              "company": "trackflow",
+              "source_document": "returns-policy",
+              "section": "Política de Devoluciones",
+              "language": "es",
+              "chunk_index": 0,
+              "text": "Las devoluciones internacionales no están cubiertas por el proceso automático estándar y requieren gestión manual del equipo de Sofía Ramos."
+            }
+          ],
+          "answer": "",
+          "error": null,
+          "route": "generate"
+        },
+        "output": {
+          "answer": "Las devoluciones internacionales requieren gestión manual del equipo de Sofía Ramos. [returns-policy | Política de Devoluciones]"
+        }
+      }
+    ]
+  },
+  {
+    "trace_id": "22222222-2222-4222-8222-222222222222",
+    "status": "rejected",
+    "question": "   ",
+    "answer": null,
+    "error_code": "invalid_question",
+    "origin": "synthetic_test_fixture",
+    "nodes": [
+      {
+        "order": 1,
+        "node": "receive",
+        "status": "completed",
+        "input": {"question": "   "},
+        "output": {
+          "question": "",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "invalid_question"
+        }
+      },
+      {
+        "order": 2,
+        "node": "invalid_question",
+        "status": "completed",
+        "input": {
+          "question": "",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "invalid_question"
+        },
+        "output": {"error": "La pregunta no puede estar vacía."}
+      }
+    ]
+  },
+  {
+    "trace_id": "33333333-3333-4333-8333-333333333333",
+    "status": "completed",
+    "question": "¿Qué política no documentada aplica?",
+    "answer": "La base de conocimiento no contiene información suficiente para responder. Confirma la condición con el equipo responsable antes de prometerla.",
+    "origin": "synthetic_test_fixture",
+    "nodes": [
+      {
+        "order": 1,
+        "node": "receive",
+        "status": "completed",
+        "input": {"question": "¿Qué política no documentada aplica?"},
+        "output": {
+          "question": "¿Qué política no documentada aplica?",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "retrieve"
+        }
+      },
+      {
+        "order": 2,
+        "node": "retrieve",
+        "status": "completed",
+        "input": {
+          "question": "¿Qué política no documentada aplica?",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "retrieve"
+        },
+        "output": {"context": [], "route": "no_context"}
+      },
+      {
+        "order": 3,
+        "node": "no_context",
+        "status": "completed",
+        "input": {
+          "question": "¿Qué política no documentada aplica?",
+          "context": [],
+          "answer": "",
+          "error": null,
+          "route": "no_context"
+        },
+        "output": {
+          "answer": "La base de conocimiento no contiene información suficiente para responder. Confirma la condición con el equipo responsable antes de prometerla."
+        }
+      }
+    ]
+  }
+]

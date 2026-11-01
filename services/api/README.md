@@ -27,6 +27,25 @@ Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
   - Response: proveedor actualizado
 - `DELETE /suppliers/{id}`
   - Response: confirmacion de borrado
+- `POST /agent/query`
+  - Request: JSON `{"question":"..."}`; requiere Bearer authentication.
+  - Response: respuesta generada y `trace_id` consultable.
+- `GET /agent/traces/{trace_id}`
+  - Response: trace persistente de la ejecucion; solo visible para su propietario.
+
+Para consultar un trace usando un `trace_id` de la respuesta autenticada:
+
+```bash
+curl -sS -H "Authorization: Bearer <TOKEN>" \
+  http://localhost:8000/agent/traces/<trace_id>
+```
+
+El agente LangGraph se compila durante el lifespan de FastAPI. Checkpoints y
+traces se guardan por separado en SQLite bajo `TRACKFLOW_AGENT_DATA_DIR`
+(por defecto `.agent-data/`). Configura esa ruta en almacenamiento persistente
+para conservarlos entre reinicios. No expongas ni versionas esa carpeta.
+Las preguntas vacias devuelven 422; los fallos de nodos devuelven 503 con un
+mensaje sanitizado y un `trace_id`.
 
 ## Cola de tareas (DEV-55)
 

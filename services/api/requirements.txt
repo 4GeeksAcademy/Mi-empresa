@@ -19,3 +19,5 @@ flower==2.0.1
 qdrant-client>=1.15,<1.17
 openai>=2.0.0
 markdown-it-py>=4.2.0
+langgraph>=1.2.19
+langgraph-checkpoint-sqlite>=3.1.3

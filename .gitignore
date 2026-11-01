@@ -65,3 +65,6 @@ tmp/
 temp/
 
 services/api/data/*.json
+
+# Agent runtime state (never commit questions or retrieved documents)
+.agent-data/
