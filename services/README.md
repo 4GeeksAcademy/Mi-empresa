@@ -9,6 +9,8 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 
 ## Services currently available
 
+- `knowledge/` - Commercial knowledge corpus preparation and Qdrant indexing.
+	See [configuration and current scope](knowledge/README.md).
 - `api/` - FastAPI service for incidents analysis.
 	- `POST /api/incidents/analyze`: validates and analyzes uploaded CSV files.
 	- `GET /api/incidents/results/export`: exports the last analysis as `results.csv`.

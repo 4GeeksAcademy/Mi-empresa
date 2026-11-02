@@ -1,0 +1,101 @@
+[
+  {
+    "question": "¿Cuál es el SLA estándar de entrega dentro del mismo país?",
+    "expected": [
+      {
+        "source_document": "sla-delivery",
+        "section": "SLA de Entrega"
+      }
+    ]
+  },
+  {
+    "question": "¿Qué compensación corresponde si un país queda por debajo del nivel de entregas a tiempo durante dos meses?",
+    "expected": [
+      {
+        "source_document": "sla-delivery",
+        "section": "SLA de Entrega"
+      }
+    ]
+  },
+  {
+    "question": "¿Qué advertencia hay sobre Black Friday, Navidad y las Rebajas?",
+    "expected": [
+      {
+        "source_document": "sla-delivery",
+        "section": "SLA de Entrega"
+      }
+    ]
+  },
+  {
+    "question": "¿Cuál es la ventana estándar para devolver un producto?",
+    "expected": [
+      {
+        "source_document": "returns-policy",
+        "section": "Política de Devoluciones"
+      }
+    ]
+  },
+  {
+    "question": "¿Cómo se gestionan las devoluciones internacionales?",
+    "expected": [
+      {
+        "source_document": "returns-policy",
+        "section": "Política de Devoluciones"
+      }
+    ]
+  },
+  {
+    "question": "¿Qué transportista cubre mejor las zonas rurales de Aragón?",
+    "expected": [
+      {
+        "source_document": "carrier-coverage",
+        "section": "Cobertura de Transportistas"
+      }
+    ]
+  },
+  {
+    "question": "¿Qué transportista ofrece cobertura fiable para envíos internacionales desde Los Ángeles?",
+    "expected": [
+      {
+        "source_document": "carrier-coverage",
+        "section": "Cobertura de Transportistas"
+      }
+    ]
+  },
+  {
+    "question": "¿Cuánto cuesta almacenar por metro cúbico en Zaragoza y cómo se solicitan descuentos?",
+    "expected": [
+      {
+        "source_document": "storage-pricing",
+        "section": "Tarifas de Almacenamiento"
+      }
+    ]
+  },
+  {
+    "question": "¿Cuánto tiempo sin movimiento activa la tarifa de inventario de larga duración y cuál es su importe?",
+    "expected": [
+      {
+        "source_document": "storage-pricing",
+        "section": "Tarifas de Almacenamiento"
+      }
+    ]
+  },
+  {
+    "question": "¿Quién debe aprobar una excepción para elegir manualmente un transportista?",
+    "expected": [
+      {
+        "source_document": "carrier-coverage",
+        "section": "Cobertura de Transportistas"
+      }
+    ]
+  },
+  {
+    "question": "¿Quién asume el coste de una devolución cuando el producto llegó dañado durante el tránsito?",
+    "expected": [
+      {
+        "source_document": "returns-policy",
+        "section": "Política de Devoluciones"
+      }
+    ]
+  }
+]
