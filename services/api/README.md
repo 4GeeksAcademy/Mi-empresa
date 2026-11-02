@@ -2,6 +2,20 @@
 
 Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
 
+## Integracion MCP y dependencias
+
+El agente consulta incidencias exclusivamente mediante MCP; requiere
+`TRACKFLOW_MCP_URL` y un access token `TRACKFLOW_MCP_TOKEN` de lectura en su
+propio proceso. No confundirlo con el token de autenticacion de la API.
+El servidor MCP se ejecuta en otro entorno, no se instala FastMCP en esta API.
+Ver [arranque, permisos y evidencia de entrega](../../mcps/trackflow/README.md).
+
+Requirements incluye adapters, MCP SDK 1 y `sse-starlette<3.6` para conservar
+compatibilidad con FastAPI 0.117.1/Starlette 0.48.0. Instalacion limpia Python
+3.12 verificada: 162 dependencias compatibles y 20 pruebas focalizadas PASS.
+El lock de uv de esta carpeta esta restringido y no se actualizo: un mantenedor
+autorizado debe sincronizarlo antes de instalar esta API con `--locked`.
+
 ## Endpoints
 
 - `POST /api/incidents/analyze`

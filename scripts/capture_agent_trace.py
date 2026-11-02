@@ -42,15 +42,16 @@ def main() -> int:
         encoding="utf-8",
     )
     retrieval = next(
-        node for node in trace["nodes"] if node["node"] == "retrieve"
+        (node for node in trace["nodes"] if node["node"] == "retrieve"), None
     )
     sources = sorted({
         item["source_document"]
         for item in retrieval["output"]["context"]
-    })
+    }) if retrieval is not None else []
     print(f"Trace: {execution.trace_id}")
     print(f"Status: {trace['status']}")
     print(f"Sources: {', '.join(sources) if sources else '(none)'}")
+    print(f"Nodes: {' -> '.join(node['node'] for node in trace['nodes'])}")
     print(f"Answer: {trace['answer']}")
     print(f"Export: {args.output}")
     return 0

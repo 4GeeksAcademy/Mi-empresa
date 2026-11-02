@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from services.support_agent.incidents import FALLBACK, IncidentSuccess, format_incidents
+
 
 def _nodes(trace: dict[str, Any]) -> list[dict[str, Any]]:
     nodes = trace.get("nodes")
@@ -28,6 +30,65 @@ def evaluate_trace(trace: dict[str, Any]) -> list[tuple[str, bool, str]]:
             and names == ["receive", "invalid_question"]
         )
         results.append(("empty_question", passed, "empty input routes directly to rejection"))
+        return results
+
+    expected_source = trace.get("expected_source")
+    selected_source = nodes[0].get("output", {}).get("source") if nodes else None
+    if expected_source in {"incidents", "both"} or selected_source in {"incidents", "both"}:
+        tool_nodes = [node for node in nodes if node.get("node") == "incidents"]
+        tool_output = tool_nodes[0].get("output", {}) if len(tool_nodes) == 1 else {}
+        tool_result = tool_output.get("incident_result", {})
+        common = (
+            trace.get("status") == "completed"
+            and len(tool_nodes) == 1
+            and names[:2] == ["receive", "incidents"]
+            and all(node.get("status") == "completed" for node in nodes)
+            and (expected_source is None or expected_source == selected_source)
+        )
+        succeeded = tool_result.get("ok") is True
+        if selected_source == "both":
+            expected_names = ["receive", "incidents"]
+            if not succeeded:
+                expected_names.append("tool_fallback")
+            expected_names += ["retrieve", "generate" if "generate" in names else "no_context"]
+            results.append((
+                "routing_both",
+                common and names == expected_names,
+                "operational lookup precedes one documentation retrieval",
+            ))
+        elif succeeded:
+            rows = tool_result.get("incidents")
+            valid_rows = isinstance(rows, list) and all(
+                isinstance(row, dict)
+                and all(field in row for field in (
+                    "id", "title", "status", "category", "origin", "branch",
+                    "created_at", "updated_at",
+                ))
+                for row in rows
+            )
+            expected_answer = None
+            if valid_rows:
+                success: IncidentSuccess = {"ok": True, "incidents": rows}
+                expected_answer = format_incidents(success)
+            query_id = tool_nodes[0].get("input", {}).get("incident_query", {}).get("ticket_id")
+            results.append((
+                "routing_tool" if query_id is not None else "routing_list",
+                common and names == ["receive", "incidents", "incident_answer"]
+                and valid_rows and answer == expected_answer
+                and (query_id is None or (len(rows) == 1 and rows[0].get("id") == query_id)),
+                "live incident lookup answers from returned fields without RAG",
+            ))
+        else:
+            results.append((
+                "tool_fallback",
+                common and names == ["receive", "incidents", "tool_fallback", "incident_answer"]
+                and tool_result.get("error_code") in {
+                    "timeout", "unavailable", "not_found", "authentication",
+                    "invalid_response", "invalid_input", "configuration", "http_error",
+                }
+                and isinstance(answer, str) and answer.startswith(FALLBACK),
+                "tool failure takes an explicit honest-answer route without RAG",
+            ))
         return results
 
     retrieve_nodes = [node for node in nodes if node.get("node") == "retrieve"]
@@ -58,6 +119,12 @@ def evaluate_trace(trace: dict[str, Any]) -> list[tuple[str, bool, str]]:
         and all(node.get("status") == "completed" for node in nodes)
     )
     results.append(("flow", flow_passed, "retrieve runs once before generation with its context"))
+    results.append((
+        "routing_rag",
+        flow_passed and expected_source in {None, "rag"}
+        and selected_source in {None, "rag"} and "incidents" not in names,
+        "documented policy uses RAG without the incident tool",
+    ))
 
     is_returns_question = (
         isinstance(question, str)
@@ -90,3 +157,4 @@ def evaluate_trace(trace: dict[str, Any]) -> list[tuple[str, bool, str]]:
 
 
 REQUIRED_CASES = {"flow", "empty_question", "no_context", "briefing_grounding"}
+EXTERNAL_REQUIRED_CASES = {"routing_tool", "routing_rag"}

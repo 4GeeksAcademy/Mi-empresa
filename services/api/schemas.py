@@ -5,6 +5,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from models import Warehouse
+from inventory_contracts import ProductResponse
 
 
 class ProductCreateInput(BaseModel):
@@ -13,14 +14,6 @@ class ProductCreateInput(BaseModel):
     name: str = Field(min_length=1, max_length=120)
     sku: str = Field(min_length=1, max_length=64)
     warehouse: Warehouse
-
-
-class ProductResponse(BaseModel):
-    id: int
-    name: str
-    sku: str
-    warehouse: Warehouse
-    current_stock: int
 
 
 class InboundOrderCreateInput(BaseModel):

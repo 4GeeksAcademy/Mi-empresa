@@ -1,5 +1,90 @@
 # Progress Log
 
+## 2026-11-02 (preparacion de publicacion MCP)
+
+- Actualizacion de publicacion: el usuario confirma 4GeeksAcademy/Mi-empresa como destino de commit, push y PR, y solicita excluir uv.lock. La sincronizacion de locks queda pendiente y fuera de este commit; no se garantiza instalacion con --locked.
+- Usuario autoriza commit, push y PR siguiendo entrega hacia su fork. Alcance del commit: servidor/cliente MCP, migracion del agente, contratos compartidos, dependencias, pruebas existentes y documentacion.
+- Se excluyen explicitamente `services/data/incidents.json` (registros QA), archivos de entorno, credenciales, traces privados y lock restringido de API.
+- Validaciones previas: 59 tests focalizados PASS, evals Logto 2/2 PASS, Pyright independiente 0 errores/avisos y diff-check PASS. Pendiente administrativo de lock API documentado; no se afirma login PKCE interactivo.
+- Unico remoto configurado: 4GeeksAcademy/Mi-empresa; no hay fork personal confirmado. gh sin sesion iniciada. No publicar contra academia por suposicion: preparar commit local y confirmar destino antes de push/PR.
+
+## 2026-11-02 (cierre de entrega MCP: reproducibilidad y tipos)
+
+- Agregada restriccion sse-starlette>=3,<3.6 a manifiesto/requirements API para preservar FastAPI 0.117.1 y Starlette 0.48.0. Compilacion desde requirements e instalacion en venv vacio Python 3.12 dentro de contenedor desechable: 162 paquetes compatibles (uv pip check), 20 tests API/inventario/incidencias PASS. Sin depender de paquetes preinstalados de recuperacion.
+- Corregidos tipos: adaptador HTTP recibe TypeAdapter[T], import publico McpError, constructor explicito de configuracion desde entorno y lista tipada de codigos de error. Pyright independiente con FastMCP 3.4.11: 0 errores/0 avisos. Regresiones focalizadas cliente/grafo/evals: 39 PASS tras los cambios.
+- Pylance mantiene reportMissingImports pese a seleccionar .venv. La politica bloqueo acceso al interprete local durante validacion; no se intento leerlo con herramientas alternativas. Chequeo independiente ejecutado en contenedores desechables, sin tocar el entorno del editor.
+- Lock API restringido: no se accedio ni reconstruyo. Documentada instalacion limpia por requirements y necesidad de sincronizacion por mantenedor antes de --locked en API. Root lock permanece disponible para entorno MCP separado. No afirmar completa sincronizacion de locks.
+- README MCP incluye guia de entrega, comandos de reproduccion, checklist/evidencia, limites de tokens/PKCE y distincion entre captura CLI y configuracion del agente HTTP. No se crearon tests nuevos ni datos de inventario; stock conocido cubierto por tests existentes.
+- Capturas Playground y Logto real ya acreditan las cinco tools, minimo privilegio y ciclo de QA 3 resuelto. Login PKCE interactivo y renovacion automatica no acreditados. Sin commits ni cambios de secretos/infraestructura/workflows.
+
+## 2026-11-02 (evidencia de MCP Playground por URL publica)
+
+- Capturas del usuario acreditan discovery y uso de las cinco tools en MCP Playground con URL publica Codespaces y access tokens de Logto. Cliente de lectura consulta lista/ticket y recibe INSUFFICIENT_SCOPE al consultar inventario.
+- Cliente de validacion separado: consulta inventario sin error visible (Playground muestra Empty response); backend confirmado HTTP 200 con lista vacia, sin afirmar una consulta de stock con productos.
+- Intento operation=delete rechazado explicitamente con READ_ONLY_INVENTORY teniendo inventory:read. Creacion de incidencia QA 3, cambio a in_progress, consulta y cierre resolved acreditados por capturas. GET posterior confirma persistencia del ticket 3 resuelto.
+- Acceso de Playground validado con cabecera bearer obtenida mediante client credentials. No se acredita login interactivo Authorization Code + PKCE. No se leyeron tokens ni archivos de entorno.
+
+## 2026-11-02 (aceptacion del agente con OAuth real de Logto)
+
+- Usuario ejecuto cliente contra URL publica Codespaces con access token Logto y scopes mcp:access incidents:read: discovery y list_incidents reales correctos.
+- Captura del grafo real exportada en `.agent-data/mcp-logto-evals.json`; evaluador repetido por el agente: routing_tool y tool_fallback, 2/2 PASS. El not_found corresponde al caso negativo intencional, no a fallo de aceptacion.
+- Token obtenido y configurado localmente por el usuario, no leido ni mostrado por el agente. Archivo de entorno restringido por politica de contenido; no se intento acceder por vias alternativas.
+- Pendiente validacion en MCP Playground mediante URL publica, incluyendo cliente de validacion separado con permisos de mutacion/inventario. Cliente del agente conserva permisos minimos de lectura.
+
+## 2026-11-02 (recuperacion autorizada del backend para MCP)
+
+- Contenedor anterior `mi-empresa-agent-backend-recovered` no arrancaba: Docker reportaba RWLayer unexpectedly nil. Conservado sin borrar sus datos, volumenes ni caches.
+- Con autorizacion del usuario se creo una imagen derivada `mi-empresa-backend-mcp-recovery` con dependencias MCP instaladas mediante uv. Se conservaron FastAPI 0.117.1 y Starlette 0.48.0; adapters 0.3.2, MCP 1.30.0 y sse-starlette 3.0.3. uv pip check PASS.
+- Sustituto activo `mi-empresa-agent-backend-mcp-ready`, mismos montajes y entorno del original sin exponer secretos. Puerto del backend limitado a 127.0.0.1:8000. El primer sustituto sin dependencias quedo detenido, sin borrarse.
+- Health, GET incidencias y GET inventario HTTP 200; dos incidencias conservadas, cero productos. Adaptador HTTP del servidor MCP consulta correctamente las incidencias. 16 pruebas existentes de inventario/incidencias PASS en el contenedor nuevo. Metadata MCP en puerto 8001 HTTP 200.
+- Sin cambios en archivos de entorno ni infraestructura; sin nuevas mutaciones de registros operativos. Pendiente repetir llamada desde el cliente con token real del usuario para confirmar el recorrido publico completo tras la recuperacion.
+
+## 2026-11-02 (MCP: migracion del agente y aceptacion local)
+
+- Eliminado acceso HTTP directo de `support_agent/incidents.py`; unica ruta operativa es langchain-mcp-adapters -> servidor MCP. Contratos, router RAG/incidencias/ambos y fallback conservados. Deadline total 5 s incluye initialize/discovery/call/cleanup. Token requerido por entorno, sin secretos en estado ni logs.
+- FastMCP 4.1.5/MCP 2.3.0 resultaron incompatibles con adapters 0.3.1 (RequestContext ausente). Resuelto con uv add fastmcp>=3,<4 y mcp>=1.26,<2. Versiones efectivas FastMCP 3.4.11, MCP 1.30.0. Root lock actualizado; manifests API y requirements incorporan adapters/MCP. Lock API no regenerado; sincronizar en entorno autorizado antes de instalar API con --locked.
+- Adaptadas pruebas existentes de transporte a MCP; 39 tests de external tools/grafo/evals PASS. Sin nuevos archivos de tests. Verificacion HTTP real del grafo con ticket existente y trace SQLite temporal PASS. Rechazos de token invalido/caducado y scope insuficiente sanitizados; CLI FastMCP/discovery PASS con versiones compatibles.
+- Todas las cinco tools verificadas contra backend real usando JWT/JWKS local efimero. Creada SOLO incidencia tecnica ID 2 `[MCP VALIDATION] Local acceptance 2026-11-02`; open -> in_progress -> resolved; transicion inversa rechazada. Incidencias preexistentes sin cambios. Inventario consultado, escritura denegada.
+- Validacion de URLs extraida a modulo de servicio compartido para no requerir instalar/montar mcps dentro del backend. No se modificaron infraestructura ni secretos. Servicios de validacion efimeros detenidos.
+- Pendientes externos: issuer/proveedor OAuth real, registro de clientes y scopes, puerto Codespaces publico, login y evidencia en MCP Playground. El enunciado especifica MCP Auth, no identifica un proveedor concreto. No se declara aceptacion externa completada; sin commits.
+- Cierre local: 39 regresiones repetidas tras extraer helper URL PASS, compileall/diff-check PASS. Busqueda acotada confirma ausencia de rutas /api/incidents, variables HTTP antiguas y cliente HTTP directo en support_agent. Configuracion MCP ausente produce fallback configuration sin acceso al backend.
+- La herramienta del editor reporto /opt/conda inicialmente; se selecciono .venv raiz, pero los diagnosticos Pylance siguen mostrando reportMissingImports. No se afirma type-check completo. Issuer, URL y token MCP externos no estan presentes en el entorno heredado (solo se comprobaron booleanos de presencia, sin leer archivos de entorno ni secretos).
+
+## 2026-11-02 (MCP: servidor y cliente FastMCP, fase independiente)
+
+- Autorizada por el usuario la excepcion de arquitectura para alojar el servidor en `mcps/`; APIs de negocio permanecen en `services/`. Rama `feature/mcp-oauth-tools`, sin commit.
+- Dependencias FastMCP y MCP Auth gestionadas con uv en el proyecto raiz. Servidor y cliente CLI en `mcps/trackflow`, transporte Streamable HTTP. OAuth mediante MCP Auth, sin auth integrada de FastMCP.
+- OIDC discovery/JWKS, validacion de firma/issuer/audiencia/exp obligatorio y scope global mcp:access. Protected Resource Metadata RFC 9728 y challenges HTTP; scopes por tool y logs sanitizados de cliente/tool/resultado.
+- Cinco tools reutilizan backend real: listar/consultar/crear incidencias, cambiar estado por PATCH /api/incidents/{id}/status y consultar inventario. Politica explicita deniega escrituras de inventario; allowlist HTTP independiente y sin credenciales de escritura.
+- Extraidos Warehouse y ProductResponse a `services/api/inventory_contracts.py`, compartidos por backend y MCP sin dependencia ORM en el servidor. Ajustado empaquetado API para incluir el modulo.
+- Validacion: 16 tests existentes de inventario/incidencias PASS en contenedor con fuentes montadas. Comprobacion HTTP con JWKS/firma local: metadata, discovery tipado, JWT ausente/invalido/caducado/sin exp, issuer/audiencia/scopes, rechazos de tool/escritura y logs PASS. Lecturas MCP contra backend real PASS; cliente FastMCP discovery/consulta PASS. Servidores efimeros detenidos; sin crear/modificar datos reales.
+- Comprobacion aislada adicional PASS: creacion/consulta y PATCH de estado por ruta exacta, VALIDATION_ERROR sanitizado, denegacion de escritura con scope adicional, allowlist antes de red y CORS por origen. Sintaxis/CLI/diff-check PASS. Pylance indica interprete `.venv-1` con reportMissingImports; ejecucion MCP validada en `.venv` raiz, sin afirmar type-check completo ni cambiar la seleccion del editor.
+- Pendiente proveedor OAuth real y Playground por URL publica, creacion/transicion real y migracion del grafo mediante langchain-mcp-adapters. El agente aun usa HTTP directo: NO se declara completado el reto. Sin cambios en secretos, archivos de entorno, infraestructura ni workflows.
+
+## 2026-11-02 (LangGraph Parte 2: aceptacion con ticket existente)
+
+- El usuario creo un ticket por el flujo del gestor. GET real de incidentes confirma un registro, ID 1. La verificacion del agente solo realizo consultas GET; no creo ni modifico incidencias.
+- Capturados dos traces autenticos mediante el backend HTTP: consulta del ticket 1 y fallback 404 para un ID ausente. Export privado en `.agent-data/incident-evals.json`; checkpoints/traces tambien persistidos en el volumen del backend.
+- `scripts.evaluate_agent_traces --require-external`, con esos traces y el trace RAG autentico previo de Parte 1, termina con codigo 0: routing_tool, tool_fallback, flow, routing_rag y briefing_grounding, 5/5 PASS. Resuelto el bloqueo de ausencia de ticket. No se afirma una nueva ejecucion live del proveedor RAG.
+- Regresiones finales en el contenedor reconstruido: 32 pruebas focalizadas pasan (external tools y grafo). La ultima ejecucion completa de los cuatro archivos afectados fue 43 PASS el dia anterior.
+- Backend recuperado con constructor clasico `DOCKER_BUILDKIT=0` ante snapshots BuildKit daniados, sin borrar datos ni caches compartidas. Contenedor `mi-empresa-agent-backend-recovered`, arranque sin reload, configuracion SQLite local previamente autorizada; health y Swagger responden 200.
+- El lock `services/api/uv.lock` tiene cambios ajenos y esta restringido; no se leyo ni modifico. Validaciones finales realizadas con dependencias ya instaladas en Docker, sin regenerar locks. El ticket creado por el usuario aparece como cambio en `services/data/incidents.json`; no se incluye en ninguna operacion de publicacion.
+- Sin commit, push ni PR. Inventario opcional omitido; router determinista ES/EN mantiene el alcance documentado.
+- Publicacion solicitada por el usuario: alcance limitado a graph/tools, evals/captura, tests y README/progreso de Parte 2. Se excluyen `services/api/uv.lock`, `services/data/incidents.json`, secretos y exports privados. Evidencia para PR: tool trace `f7963d03-14bf-42aa-ad4f-3ac5a72c12fe` (receive/incidents/incident_answer), fallback trace `11bab330-1811-4087-ab05-655efcd99d95` (404), RAG autentico previo `3aeb3d6a-1f1b-471b-90a9-4956323ed6c9`. GitHub CLI no tiene autenticacion; se intentara la integracion de VS Code para abrir el PR.
+
+## 2026-11-01 (LangGraph Parte 2: herramientas externas, aceptacion parcial)
+
+- Integrada tool HTTP de solo lectura que reutiliza IncidentFilters/IncidentResponse del backend existente. Entrada por ticket_id positivo o filtros reales; salida tipada distingue registros y errores sanitizados. Los GET de incidentes actuales no requieren autenticacion; token de gateway opcional desde entorno, nunca en estado/traces.
+- Deadline total efectivo de 5.0 segundos con asyncio.wait_for y timeouts HTTPX. Verificado contra respuesta HTTP local lenta: timeout a los 5.003 segundos. Rutas explicitas de fallback para timeout, 404, autenticacion, red, servidor y payload invalido, sin inventar estados ni sustituirlos con RAG.
+- Enrutamiento local ES/EN entre incidentes, RAG y ambos. Preguntas mixtas consultan incidentes antes de recuperar documentacion; resultados operativos se formatean directamente y no se envian al modelo. Router determinista de alcance limitado, no clasificador semantico general. Inventario opcional omitido.
+- Extendidas evals offline y CLI con routing_tool, routing_rag, routing_both, routing_list y tool_fallback; --require-external exige ticket existente y RAG. Captura obtiene IDs del backend real, no crea datos y devuelve codigo no cero si no hay tickets.
+- Validacion: 39 pruebas focalizadas pasaron antes del refinamiento final del router; despues, 23 pruebas de herramientas externas pasaron. compileall OK. No hubo fallos de tests; advertencia preexistente de Starlette/AnyIO.
+- Backend Compose original fallo por ruta de contrato de telemetria y DATABASE_URL ausente. Con autorizacion explicita, arrancado mi-empresa-agent-local-backend con SQLite local para inicializacion de inventario y montaje adicional readonly del contrato; sin cambios en infraestructura ni archivos de entorno. /health responde ok.
+- Backend real contiene cero incidentes. Capturados traces locales privados de lista vacia y 404; junto al trace autentico previo de Parte 1 pasan routing_list, tool_fallback, flow, routing_rag y briefing_grounding. Aceptacion --require-external sigue BLOQUEADA por ausencia de routing_tool sobre ticket existente. No se ejecuto un nuevo RAG contra proveedor externo.
+- README de agente, servicios y scripts actualizados. Sin commit/push/PR. Pendiente un backend con incidentes reales y nueva evidencia live de ticket existente; no usar mocks como aceptacion.
+- Usuario compartio fallo de creacion de entorno VS Code: instalacion conjunta incompatible entre pytest>=9.2.0 del proyecto raiz y pytest==8.4.2 de services/api/requirements.txt. Pylance confirma seleccion de .venv-1 tras instalacion fallida. No se cambiaron dependencias para resolver este problema ajeno a la tool. El intento posterior de inspeccionar services/api/.venv/bin/python fue denegado por content exclusion; no se intento otra via de acceso.
+- El usuario confirma que ya selecciono el interprete correcto en VS Code. Validacion final repetida con `uv run --project services/api --extra test`: 43 pruebas focalizadas pasan; `compileall` y `git diff --check` pasan. El backend local autorizado sigue running y `/health` devuelve `{"status":"ok"}`; GET real de incidentes devuelve 200 con cero registros. Evals reales disponibles pasan routing_list, fallback 404 y routing_rag; `--require-external` falla correctamente porque falta routing_tool de un ticket existente. La tarea queda implementada pero aceptacion de ticket existente sigue bloqueada, sin crear tickets ni usar mocks como evidencia.
+
 ## 2026-11-01 (LangGraph: evaluación final local)
 
 - El usuario capturo trace autentico en su terminal con `.env`: estado completed, fuente `returns-policy`, respuesta directa que indica que devoluciones internacionales requieren gestion manual de Sofía Ramos. El CLI originalmente fallo porque el chunk recuperado incluye salto de linea entre "gestion" y "manual"; se normaliza whitespace en el evaluador. CLI sobre `.agent-data/agent-trace-returns.json`: 2/2 PASS (flow y briefing_grounding); prueba de regresion del salto de linea incluida.
