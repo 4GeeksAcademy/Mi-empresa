@@ -1,5 +1,47 @@
 # Progress Log
 
+## 2026-11-02 (publicacion del hito de memoria)
+
+- Usuario autoriza commit, push y PR en Hugo-VC/Mi-empresa, limitado a la tarea de memoria. Alcance: agente, integracion API, pruebas de memoria, READMEs, briefing y progreso. Excluidos cambios locales de ambos uv.lock y services/data/incidents.json; no se accede a archivos restringidos.
+- Evidencia previa: 71 pruebas focalizadas PASS en terminal del usuario, sintaxis y diff-check focalizado PASS. Arquitectura revisada: reutiliza LangGraph/MCP, memoria SQLite separada de RAG, sin arquitectura multiagente.
+- Main del fork esta seis commits por detras de la base de esta tarea (RAG/LangGraph/MCP). Un PR directo contra main incluiria esos hitos; no se actualiza main ni reescribe historial sin autorizacion. Pendiente resolver la base del PR para conservar el alcance exclusivo de memoria.
+
+## 2026-11-02 (fidelidad de propuestas y comandos anunciados)
+
+- Corregidos los comandos `aprobar` y `rechazar` para que coincidan con lo anunciado al usuario, sin perder prioridad del rechazo ni del lenguaje de incertidumbre y conservando consultas adicionales.
+- Cambios genericos de cobertura conservan la afirmacion elegible en vez de convertir una ampliacion en perdida de cobertura. Espana/Estados Unidos ya no implican Zaragoza/Los Angeles. Preferencias B2B guardan formato PDF y orden explicito de metricas; si no hay una preferencia soportada concreta, no se inventa una generica.
+- Anadidos 12 casos de regresion para comandos, contradicciones, consulta posterior, ampliacion de cobertura sin ciudad inventada, PDF, orden directo/inverso/combinado y ausencia de preferencia concreta. Validacion aislada stdlib de los 12 casos y los tres ejemplos positivos originales del briefing PASS; sintaxis y diff-check focalizado PASS. Suite anterior: 59 passed confirmados por el usuario; pytest ampliado requiere ejecucion en su terminal autorizado.
+- Confirmacion posterior del usuario: suite focalizada ampliada memoria/grafo/tools/API, **71 passed, 1 warning en 10.34 s**. Incluye las 12 regresiones nuevas de comandos y fidelidad de propuestas. Aviso externo Starlette/AnyIO no bloqueante; no se afirma cobertura exhaustiva de lenguaje natural ni ejecucion live del proveedor. Sin commit.
+
+## 2026-11-02 (caducidad de propuestas por silencio)
+
+- Plazo confirmado por el usuario: 30 minutos con comprobacion al acceder, sin scheduler. Inicio, crear/resolver propuestas, auditoria y consolidacion descartan propuestas vencidas dentro de la misma transaccion antes de permitir nuevas decisiones/escrituras.
+- Al cumplirse exactamente 30 minutos la propuesta se descarta: decision `expired`, evento unico `expired`, resultado `expired_without_confirmation_memory_unchanged` y timestamp de comprobacion. Una confirmacion tardia no guarda recuerdos y la consulta adjunta sigue procesandose.
+- Pruebas focalizadas ampliadas: 1799/1800/1801 segundos, desbloqueo para otra cuenta en crear/auditar/reiniciar/consolidar, idempotencia de auditoria y continuacion de pregunta tras confirmacion tardia. READMEs actualizados con semantica lazy explicita.
+- Validacion aislada stdlib PASS: limites 1799/1800/1801 segundos, cero escrituras de recuerdos vencidos, un solo evento de caducidad por propuesta, desbloqueo de otra cuenta y cuatro puntos de comprobacion. Sintaxis de modulos afectados y diff-check focalizado PASS. Las 51 pruebas previas pasaron en terminal del usuario; la suite ampliada con 8 casos requiere nueva ejecucion alli por restricciones de acceso al entorno/locks.
+- Confirmacion posterior del usuario: suite ampliada de memoria/grafo/tools/API ejecutada en su terminal, **59 passed, 1 warning en 9.68 s**. Incluye los ocho casos nuevos de caducidad y continuacion de consulta; queda resuelto el pendiente de confirmacion automatizada del silencio. Warning externo deprecado Starlette/AnyIO no bloqueante. Sin commit ni cambios en locks por el agente; no se afirma ejecucion live del proveedor ni temporizador en segundo plano.
+
+## 2026-11-02 (correccion tras ejecucion de pruebas del usuario)
+
+- El usuario confirma `uv lock --check` correcto y aporta ejecucion focalizada: 47 passed, 4 failed. Tres fallos comparten causa: el dataclass AgentExecution declaraba `proposal_memoria` mientras API y pruebas consumian `propuesta_memoria`. Se unifica el productor y su constructor en `propuesta_memoria`.
+- El cuarto fallo era una expectativa de prueba incorrecta: "Si, no estoy seguro" debe auditarse como rechazo por ambiguedad, no como rechazo explicito. Parametrizacion ajustada para comprobar el resultado exacto en los tres casos sin cambiar la clasificacion.
+- Verificacion aislada PASS: dataclass real extraido mediante AST acepta `propuesta_memoria`, conserva None por defecto y no contiene el nombre antiguo; los tres mensajes generan el rechazo y resultado auditado exactos sin escribir recuerdos. Sintaxis de ambos archivos modificados correcta. Esto no sustituye pytest/API/LangGraph.
+- No se accede ni modifica ninguno de los locks ni entornos restringidos. La nueva ejecucion integral requiere el terminal autorizado del usuario; no se declara que las 51 pruebas hayan pasado.
+- Confirmacion posterior del usuario: comando focalizado con `uv run --project services/api --extra test python -m pytest` sobre memoria, grafo, herramientas externas y API del agente termina con **51 passed, 1 warning en 9.51 s**. Quedan validados los ciclos automatizados de aprobacion/reutilizacion y rechazo/sin cambios, junto con regresiones API/LangGraph/MCP simuladas. El warning es deprecacion externa Starlette/AnyIO; no constituye prueba live del proveedor ni expiracion automatica de propuestas por silencio.
+
+## 2026-11-02 (Hito 8 Parte 1: memoria con consentimiento)
+
+- Implementada memoria persistente SQLite owner-scoped en tablas separadas de checkpoints/traces y completamente separada de RAG/Qdrant. Usa clave única por propietario/categoría/regla; carrier por carrier+país+región, patrones incidentales recurrentes y preferencias de reportes B2B.
+- Integrado el flujo con el agente LangGraph existente: lectura explícita de recuerdos lexicalmente pertinentes en un campo separado del prompt/contexto RAG, propuesta estructurada `propuesta_memoria`, confirmación antes de escritura y respuesta normal tras resolver una propuesta y añadir pregunta.
+- Clasificación de aprobación, rechazo, edición, cambio de tema y ambigüedad; máximo una propuesta pendiente global. Aprobaciones consolidan en la misma transacción; rechazos no modifican memoria. Propuestas y decisiones quedan auditadas con resultado y timestamps.
+- Restricciones del `company-BRIEFING.md`: no guardar direcciones/postales, coordenadas, rutas internas de almacén, identificadores de paquetes aislados ni negociaciones activas. No se guarda el mensaje en memoria: solo reglas normalizadas permitidas. Tres exclusiones del briefing documentadas.
+- Política determinista de deduplicación/upsert, expiración (carrier 180 días, incidentes 30, preferencias B2B 365), tope LRU de 100 recuerdos por propietario y retención auditada de 365 días; propuestas pendientes y ascendencia preservadas.
+- Documentación y ciclos de aceptación aprobada/reutilizada y rechazada/sin cambios añadidos a READMEs del agente/API/services. Añadida suite enfocada `tests/pipelines/test_agent_memory.py` para ciclos, reutilización, edición, auditoría y exclusiones.
+- Validación ejecutada: scripts aislados con stdlib confirman los tres ejemplos positivos del briefing, persistencia, aprobación, recuperación compartida entre agentes, rechazo, prioridad del rechazo explícito, rechazo por defecto ante ambigüedad/edición inválida, límite global de una propuesta, migración auditada de propuestas pendientes antiguas y exclusiones (PASS); `py_compile` y `git diff --check` (PASS). Suite pytest no pudo arrancar: `uv.lock` ya estaba modificado antes de la tarea y su TOML falla al parsear en línea 27; el Python activo no tiene pytest. Integración LangGraph no disponible porque ese Python no tiene `langgraph`. No se modificó ni intentó reparar el lock. La inspección del entorno virtual fue denegada por política de contenido y no se intentó otra vía.
+- Sin cambios en `.env`, archivos protegidos ni RAG; sin commit. Se preservan cambios preexistentes en `services/data/incidents.json` y `uv.lock`; briefing de empresa actual sin editar.
+- Reevaluación de rúbrica y corrección: rechazo explícito prevalece sobre un "sí" contradictorio; ambigüedad y ediciones inválidas rechazan por defecto y el mensaje continúa a la consulta normal. Audit trail marca el rechazo por defecto sin consolidar memoria.
+- Los recuerdos operativos aprobados se comparten entre agentes de TrackFlow; la propuesta pendiente y auditoría quedan vinculadas al usuario creador para impedir que otra persona la apruebe accidentalmente. Un índice único global garantiza una sola propuesta pendiente; si otra cuenta propone, se atiende la consulta sin crear ni exponer una segunda. Se amplían pruebas y documentación con estas garantías.
+
 ## 2026-11-02 (preparacion de publicacion MCP)
 
 - Actualizacion de publicacion: el usuario confirma 4GeeksAcademy/Mi-empresa como destino de commit, push y PR, y solicita excluir uv.lock. La sincronizacion de locks queda pendiente y fuera de este commit; no se garantiza instalacion con --locked.

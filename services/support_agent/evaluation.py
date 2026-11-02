@@ -98,6 +98,23 @@ def evaluate_trace(trace: dict[str, Any]) -> list[tuple[str, bool, str]]:
         else None
     )
 
+    if "memory_answer" in names:
+        memory_context = nodes[0].get("output", {}).get("memory_context", [])
+        passed = (
+            trace.get("status") == "completed"
+            and names == ["receive", "retrieve", "memory_answer"]
+            and retrieved_context == []
+            and bool(memory_context)
+            and all(node.get("status") == "completed" for node in nodes)
+            and isinstance(answer, str)
+            and all(item.get("content") in answer for item in memory_context)
+        )
+        results.append((
+            "memory_answer", passed,
+            "approved owner-scoped memory answers without writing to RAG",
+        ))
+        return results
+
     if retrieved_context == [] and "no_context" in names:
         passed = (
             trace.get("status") == "completed"

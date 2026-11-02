@@ -5,7 +5,7 @@ import sqlite3
 from collections.abc import Generator
 from contextlib import contextmanager
 from pathlib import Path
-from typing import Literal, TypedDict
+from typing import Literal, NotRequired, TypedDict
 
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
@@ -28,15 +28,17 @@ NO_CONTEXT = (
 
 class AgentInput(TypedDict):
     question: str
+    memory_context: NotRequired[list[dict[str, str]]]
 
 
 class AgentState(AgentInput):
     context: list[dict[str, str | int]]
+    memory_context: list[dict[str, str]]
     answer: str
     error: str | None
     route: Literal[
         "retrieve", "incidents", "invalid_question", "generate", "no_context",
-        "incident_answer", "tool_fallback",
+        "incident_answer", "tool_fallback", "memory_answer",
     ]
     source: Literal["rag", "incidents", "both"]
     incident_query: dict[str, str | int | None] | None
@@ -49,7 +51,7 @@ class AnswerUpdate(TypedDict):
 
 class ContextUpdate(TypedDict):
     context: list[dict[str, str | int]]
-    route: Literal["generate", "no_context"]
+    route: Literal["generate", "no_context", "memory_answer"]
 
 
 class ErrorUpdate(TypedDict):
@@ -66,9 +68,19 @@ def receive_question(state: AgentInput) -> AgentState:
         raise ValueError("La pregunta debe ser un texto.")
     normalized_question = question.strip()
     decision = decide_sources(normalized_question)
+    memory_context = state.get("memory_context", [])
+    if not isinstance(memory_context, list) or not all(
+        isinstance(item, dict)
+        and all(isinstance(item.get(field), str) for field in (
+            "category", "content", "updated_at",
+        ))
+        for item in memory_context
+    ):
+        raise ValueError("El contexto de memoria tiene un formato inválido.")
     return {
         "question": normalized_question,
         "context": [],
+        "memory_context": memory_context,
         "answer": "",
         "error": None,
         "route": (
@@ -96,11 +108,15 @@ def retrieve_context(state: AgentState) -> ContextUpdate:
     context = pipeline.retrieve(state["question"])
     return {
         "context": context,
-        "route": "generate" if context else "no_context",
+        "route": (
+            "generate" if context else
+            "memory_answer" if state["memory_context"] else
+            "no_context"
+        ),
     }
 
 
-def route_context(state: AgentState) -> Literal["generate", "no_context"]:
+def route_context(state: AgentState) -> Literal["generate", "no_context", "memory_answer"]:
     return state["route"]
 
 
@@ -115,12 +131,24 @@ def generate_response(state: AgentState) -> AnswerUpdate:
     answer = pipeline.generate_answer(question, state["context"])
     if state["source"] == "both":
         answer = operational_answer(state) + "\n\nDocumentación:\n" + answer
+    if state["memory_context"]:
+        answer += "\n\nMemoria aprobada relevante (no sustituye la documentación):\n"
+        answer += "\n".join(f"- {item['content']}" for item in state["memory_context"])
     return {"answer": answer}
 
 
 def no_context(state: AgentState) -> AnswerUpdate:
     prefix = operational_answer(state) + "\n\n" if state["source"] == "both" else ""
     return {"answer": prefix + NO_CONTEXT}
+
+
+def memory_answer(state: AgentState) -> AnswerUpdate:
+    return {
+        "answer": (
+            "Memoria aprobada relevante de TrackFlow:\n"
+            + "\n".join(f"- {item['content']}" for item in state["memory_context"])
+        )
+    }
 
 
 class IncidentUpdate(TypedDict):
@@ -180,6 +208,7 @@ def build_agent_graph() -> StateGraph[AgentState, None, AgentInput, AgentState]:
     builder.add_node("retrieve", retrieve_context)
     builder.add_node("generate", generate_response)
     builder.add_node("no_context", no_context)
+    builder.add_node("memory_answer", memory_answer)
     builder.add_node("incidents", consult_incidents)
     builder.add_node("incident_answer", incident_answer)
     builder.add_node("tool_fallback", tool_fallback)
@@ -190,7 +219,11 @@ def build_agent_graph() -> StateGraph[AgentState, None, AgentInput, AgentState]:
     )
     builder.add_conditional_edges(
         "retrieve", route_context,
-        {"generate": "generate", "no_context": "no_context"},
+        {
+            "generate": "generate",
+            "no_context": "no_context",
+            "memory_answer": "memory_answer",
+        },
     )
     builder.add_conditional_edges(
         "incidents", route_incidents,
@@ -200,7 +233,10 @@ def build_agent_graph() -> StateGraph[AgentState, None, AgentInput, AgentState]:
         "tool_fallback", route_incidents,
         {"retrieve": "retrieve", "incident_answer": "incident_answer"},
     )
-    for node in ("invalid_question", "generate", "no_context", "incident_answer"):
+    for node in (
+        "invalid_question", "generate", "no_context", "memory_answer",
+        "incident_answer",
+    ):
         builder.add_edge(node, END)
     return builder
 
