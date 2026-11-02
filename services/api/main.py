@@ -36,6 +36,7 @@ from routes.telemetry import router as telemetry_router
 from routes.knowledge import router as knowledge_router
 from routes.agent import router as agent_router
 from services.support_agent.graph import open_agent_graph
+from services.support_agent.memory import AgentMemoryStore
 from services.support_agent.traces import AgentTraceStore, agent_data_directory
 from services.reporting.routes import router as reporting_router
 from pydantic import BaseModel, ConfigDict
@@ -54,13 +55,17 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         )
         traces = AgentTraceStore(data_directory / "agent.sqlite3")
         traces.setup()
+        memory = AgentMemoryStore(data_directory / "agent.sqlite3")
+        memory.setup()
         app.state.agent_graph = graph
         app.state.agent_traces = traces
+        app.state.agent_memory = memory
         try:
             yield
         finally:
             app.state.agent_graph = None
             app.state.agent_traces = None
+            app.state.agent_memory = None
 
 
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)

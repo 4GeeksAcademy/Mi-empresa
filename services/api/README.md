@@ -46,6 +46,12 @@ autorizado debe sincronizarlo antes de instalar esta API con `--locked`.
   - Response: respuesta generada y `trace_id` consultable.
 - `GET /agent/traces/{trace_id}`
   - Response: trace persistente de la ejecucion; solo visible para su propietario.
+- `GET /agent/memory`
+  - Response: recuerdos aprobados del propietario autenticado.
+- `GET /agent/memory/audit`
+  - Response: propuestas, decisiones y eventos auditables del propietario.
+- `POST /agent/memory/consolidate`
+  - Response: cantidad eliminada por la politica de expiracion/consolidacion.
 
 Para consultar un trace usando un `trace_id` de la respuesta autenticada:
 
@@ -60,6 +66,20 @@ traces se guardan por separado en SQLite bajo `TRACKFLOW_AGENT_DATA_DIR`
 para conservarlos entre reinicios. No expongas ni versionas esa carpeta.
 Las preguntas vacias devuelven 422; los fallos de nodos devuelven 503 con un
 mensaje sanitizado y un `trace_id`.
+
+La memoria comparte el archivo SQLite, pero usa tablas distintas de los
+checkpoints y traces y no escribe en RAG/Qdrant. Los recuerdos aprobados son
+compartidos por los agentes de TrackFlow; propuestas pendientes y auditoría se
+mantienen ligadas al usuario que las inició. `POST /agent/query` devuelve
+`propuesta_memoria` cuando detecta una regla elegible; esa propuesta no se guarda
+hasta que ese usuario la apruebe explícitamente en su siguiente mensaje.
+Rechazos explícitos prevalecen frente a un "sí" contradictorio y la ambigüedad
+rechaza por defecto, sin dejar de procesar la consulta. Las decisiones y
+resultados se consultan en `/agent/memory/audit`.
+Las propuestas sin confirmacion caducan a los 30 minutos, con descarte auditado
+y sin escribir recuerdos. Se comprueba al arrancar y al crear/resolver propuestas,
+consultar auditoria o consolidar. No hay temporizador en segundo plano: una
+confirmacion tardia nunca aprueba el recuerdo y no bloquea la siguiente propuesta.
 
 ## Cola de tareas (DEV-55)
 

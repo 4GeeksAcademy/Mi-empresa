@@ -114,6 +114,118 @@ with cosine similarity >= 0.35. With no evidence, a fixed honest answer avoids
 calling the model. Generation uses only the already retrieved context, retaining
 the existing prompt, citations, policies and provider configuration.
 
+## Persistent memory and consent
+
+The rules in [`company-BRIEFING.md`](../../company-BRIEFING.md) are the allowlist:
+corrected carrier coverage/assignment rules, recurring incident patterns, and
+recurring B2B monthly-report preferences. The evaluator deliberately ignores
+one-off tracking/parcel questions, conversation closings, and translation tasks.
+It also rejects exact addresses/postal codes of B2C recipients or B2B facilities,
+internal warehouse routes, isolated package identifiers, and active contract
+negotiations. It stores supported business facts rather than conversation history.
+Generic carrier-coverage changes preserve the eligible statement instead of
+inventing a loss of coverage; a country mention is not mapped to a warehouse city.
+B2B report preferences preserve an explicit PDF format and the stated metric
+order. Unsupported or unspecified report preferences do not generate a generic,
+uninformative replacement fact.
+
+Memory uses separate tables in the existing private
+`TRACKFLOW_AGENT_DATA_DIR/agent.sqlite3` database. Approved operational memories
+are shared across TrackFlow agents; proposal state and audit remain scoped to
+the authenticated user who raised them, so another employee cannot decide
+someone else's pending proposal. At most one proposal is pending globally; a
+different user's eligible interaction is answered normally without creating
+or exposing a second proposal. This is a small, structured key/value store:
+carrier facts consolidate by carrier + country + region, while report
+preferences consolidate by client segment. The existing RAG corpus and Qdrant
+collections remain read-only and are never used for memory writes. The agent
+loads only lexically relevant approved memories into a distinct graph input
+field; it does not append memory to the system prompt. It renders retrieved
+memory explicitly, and can answer from memory when RAG has no evidence.
+
+This fits TrackFlow's repeated, structured corrections and preferences while
+sharing reusable operating knowledge while keeping each employee's decisions
+isolated and auditable. SQLite is reused
+because the agent already has a private persistent SQLite lifecycle and the
+memory is small and keyed, not a document-retrieval corpus. Redis would add
+another service without useful high-throughput/TTL needs; a vector database
+would mix mutable facts with similarity search and make exact deduplication
+harder; a knowledge graph is unnecessary for the limited explicit relations.
+This is a single-API-instance design, not a multi-replica production guarantee.
+
+After an eligible interaction, `POST /agent/query` returns the optional
+structured field `propuesta_memoria`. It is only pending at this point. The next
+message is classified as approve, reject, edit, unrelated topic, or ambiguous:
+only explicit approval writes memory; any explicit rejection takes precedence
+over an approval word and leaves memory unchanged; an edit creates a replacement
+proposal that still requires approval; an unrelated topic discards the pending
+proposal; ambiguity (including an invalid edit) rejects it by default. There is
+never more than one pending proposal globally. The rest of a message is still
+handled after the decision. Each proposal and response action has an
+owner-scoped audit timestamp and result.
+The advertised commands `aprobar` and `rechazar` are recognized explicitly,
+including when followed by another question. Contradictions or uncertainty
+still prevent approval.
+
+Pending proposals expire after **30 minutes** without confirmation, including
+exactly at the deadline. Startup, proposal creation, decision processing,
+consolidation and audit access check expiry transactionally. An expired proposal
+is discarded with decision `expired` and audit result
+`expired_without_confirmation_memory_unchanged`; it never becomes a memory.
+Repeated checks do not duplicate the expiry event. A late confirmation cannot
+approve the expired proposal, and any accompanying query continues normally.
+Another employee can create a proposal after expiry without waiting for the
+original employee to return. Expiry is lazy/on-access, not a background timer:
+an idle service may retain a pending row past the deadline until the next check,
+but that row can neither be approved nor block a new proposal after the check.
+Thirty minutes allows an ordinary conversational decision without leaving
+time-sensitive corrections pending indefinitely.
+
+- `GET /agent/memory` reads approved memories shared by TrackFlow agents.
+- `GET /agent/memory/audit` reads that owner's proposals and decision events.
+- `POST /agent/memory/consolidate` runs the deterministic expiry/deduplication
+  policy for shared memories and expires pending proposals; it cannot add a memory.
+- Proposal audit is private per authenticated user, like traces; approved memory
+  is shared within TrackFlow. Back up
+  `TRACKFLOW_AGENT_DATA_DIR` to retain it across restarts.
+
+Consolidation upserts identical `(category, key)` entries rather than
+creating duplicates; expires carrier rules after 180 days, recurring incident
+patterns after 30 days, and B2B preferences after 365 days; and caps approved
+memories at 100 by evicting least-recently-used entries. Resolved
+proposal audit is retained for 365 days; pending proposals and their ancestry
+are preserved until pending-proposal expiry is checked. These conservative TTLs keep time-sensitive operational memory
+from becoming stale while retaining the reusable customer preferences.
+
+### Verifiable consent cycles
+
+Run these through the authenticated `/agent/query` endpoint (or the focused
+`tests/pipelines/test_agent_memory.py` tests); replace `<JWT>` locally and do not
+put tokens in repository files.
+
+1. **Approved and reused:** ask
+   `En realidad SEUR ya no cubre esa zona rural de Zaragoza, hay que usar el carrier local desde el mes pasado.`
+   The response contains a `propuesta_memoria` and asks for a decision, while
+   `GET /agent/memory` remains unchanged. Send
+   `Sí, ¿qué carrier usamos para zonas rurales de Zaragoza?`; the response
+   confirms the approval and includes the approved carrier rule. Another
+   authenticated agent can then ask the same question and use the shared rule.
+   The memory endpoint contains the consolidated rule, and the audit shows the
+   approving user's result.
+2. **Rejected without change:** first record the memory count, then ask
+   `El cliente de cosméticos siempre quiere su reporte mensual con el desglose de devoluciones primero, antes que el volumen de envíos.`
+   Reply `No, además ¿qué política aplica a devoluciones internacionales?`.
+   The normal question is still answered, the memory count stays unchanged, and
+   the audit records a rejected proposal with `rejected_memory_unchanged`.
+3. **Ambiguous/rejection precedence:** with a proposal pending, `No estoy
+   seguro; ¿qué política aplica a devoluciones?` rejects it by default, records
+   `ambiguous_default_rejected_memory_unchanged`, and still answers the policy
+   question. `Sí, no la guardes` is also rejected, never approved.
+
+The three briefing examples that do **not** propose memory are: `¿Dónde está
+el paquete con tracking XJ4471?`, `Perfecto, ya quedó resuelto.`, and
+`Tradúceme esto al inglés para el cliente.`
+
 ## Dependencies
 
 From the repository root:
