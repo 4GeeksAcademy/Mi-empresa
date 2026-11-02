@@ -7,6 +7,27 @@ This folder contains **helper scripts** for the monorepo: development automation
 
 > _Spanish version: [README.es.md](./README.es.md)._
 
+## Support-agent external-tool evaluations
+
+`capture_incident_evals.py` queries the real incident backend, discovers an
+existing ticket ID and captures persisted LangGraph traces for its current
+status and a missing ID. It makes no writes and invokes no external model.
+An empty backend produces list/404 diagnostic traces and exits nonzero;
+it does not create synthetic acceptance data.
+
+```bash
+uv run --project services/api python -m scripts.capture_incident_evals
+uv run --project services/api python -m scripts.evaluate_agent_traces \
+  --require-external .agent-data/incident-evals.json \
+  tests/pipelines/fixtures/agent-trace-returns.json
+```
+
+`--require-external` requires both existing-ticket and policy routing cases;
+`--require-all` retains Part 1 coverage requirements. Both switches can be used
+together. Traces are private and git-ignored; credentials are never exported.
+`capture_agent_trace.py` also supports tool-only runs and displays ordered nodes.
+See [configuration, fallback and live-evidence limits](../services/support_agent/README.md).
+
 ## Sales forecast model (`sales_forecast.py`)
 
 Run: `uv run python scripts/sales_forecast.py` (seed 42; writes `docs/sales_forecast.png`). Test: `uv run pytest tests/pipelines/test_sales_split.py`.
