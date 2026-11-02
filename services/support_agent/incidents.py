@@ -1,4 +1,4 @@
-"""Read live incidents through the existing backend, with a total deadline."""
+"""Read incidents exclusively through authenticated MCP tools, with a total deadline."""
 
 import asyncio
 import logging
@@ -6,8 +6,14 @@ import os
 from typing import Literal, TypedDict
 
 import httpx
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import ToolException
+from langchain_mcp_adapters.client import MultiServerMCPClient
+from langchain_mcp_adapters.tools import load_mcp_tools
+from mcp import McpError
 from pydantic import ConfigDict, Field, TypeAdapter
 
+from services.api.service_urls import validate_url
 from services.api.incidents.models import (
     ALLOWED_BRANCH_VALUES,
     ALLOWED_CATEGORIES_VALUES,
@@ -67,34 +73,42 @@ def valid_filters(query: IncidentQuery) -> bool:
 
 
 async def _get_incidents(query: IncidentQuery) -> IncidentResult:
-    base_url = os.environ.get("TRACKFLOW_INCIDENTS_BASE_URL", "http://localhost:8000")
-    url = httpx.URL(base_url)
-    if url.scheme not in {"http", "https"} or not url.host or url.userinfo or url.query or url.fragment:
+    url = os.environ.get("TRACKFLOW_MCP_URL")
+    token = os.environ.get("TRACKFLOW_MCP_TOKEN")
+    if not url or not token:
         return failure("configuration")
-    token = os.environ.get("TRACKFLOW_INCIDENTS_TOKEN")
-    headers = {"Authorization": f"Bearer {token}"} if token else {}
-    path = "/api/incidents"
-    if query.ticket_id is not None:
-        path += f"/{query.ticket_id}"
-    params = query.model_dump(exclude={"ticket_id"}, exclude_none=True)
-    async with httpx.AsyncClient(
-        timeout=TIMEOUT_SECONDS, follow_redirects=False, trust_env=False,
-    ) as client:
-        response = await client.get(
-            str(url).rstrip("/") + path, params=params, headers=headers,
-        )
-    if response.status_code in {401, 403}:
-        return failure("authentication")
-    if response.status_code == 404:
-        return failure("not_found")
-    if response.status_code >= 500:
-        return failure("unavailable")
-    if response.status_code != 200:
-        return failure("http_error")
     try:
-        payload = response.json()
+        validate_url(url)
+    except ValueError:
+        return failure("configuration")
+    client = MultiServerMCPClient({
+        "trackflow": {
+            "transport": "streamable_http",
+            "url": url,
+            "headers": {"Authorization": f"Bearer {token}"},
+        },
+    })
+    name = "get_incident" if query.ticket_id is not None else "list_incidents"
+    arguments = (
+        {"ticket_id": query.ticket_id} if query.ticket_id is not None
+        else {"filters": query.model_dump(exclude={"ticket_id"}, exclude_none=True)}
+    )
+    async with client.session("trackflow") as session:
+        tools = await load_mcp_tools(session, handle_tool_errors=False)
+        selected = next((tool for tool in tools if tool.name == name), None)
+        if selected is None:
+            return failure("configuration")
+        result = await selected.ainvoke({
+            "type": "tool_call", "name": name, "args": arguments, "id": "incident-query",
+        })
+    if not isinstance(result, ToolMessage) or not isinstance(result.artifact, dict):
+        return failure("invalid_response")
+    payload = result.artifact.get("structured_content")
+    if not isinstance(payload, dict):
+        return failure("invalid_response")
+    try:
         records = INCIDENT_LIST.validate_python(
-            [payload] if query.ticket_id is not None else payload, strict=True,
+            [payload] if query.ticket_id is not None else payload.get("result"), strict=True,
         )
     except ValueError:
         return failure("invalid_response")
@@ -116,12 +130,46 @@ def query_incidents(query: IncidentQuery) -> IncidentResult:
         return failure("invalid_input")
     try:
         return asyncio.run(asyncio.wait_for(_get_incidents(query), TIMEOUT_SECONDS))
-    except (TimeoutError, httpx.TimeoutException):
-        return failure("timeout")
-    except httpx.InvalidURL:
-        return failure("configuration")
-    except httpx.RequestError:
-        return failure("unavailable")
+    except (TimeoutError, httpx.HTTPError, McpError, ToolException) as exc:
+        return failure(_error_code(exc))
+    except ExceptionGroup as exc:
+        handled, unhandled = exc.split((TimeoutError, httpx.HTTPError, McpError, ToolException))
+        if unhandled is not None or handled is None:
+            raise
+        return failure(_error_code(handled))
+
+
+def _error_code(error: Exception) -> ErrorCode:
+    if isinstance(error, ExceptionGroup):
+        codes: list[ErrorCode] = [_error_code(child) for child in error.exceptions]
+        priority: tuple[ErrorCode, ...] = (
+            "timeout", "authentication", "not_found", "invalid_input", "configuration",
+        )
+        for code in priority:
+            if code in codes:
+                return code
+        return codes[0]
+    if isinstance(error, (TimeoutError, httpx.TimeoutException)):
+        return "timeout"
+    if isinstance(error, httpx.HTTPStatusError):
+        if error.response.status_code in {401, 403}:
+            return "authentication"
+        return "unavailable"
+    if isinstance(error, ToolException):
+        errors: dict[str, ErrorCode] = {
+            "NOT_FOUND:": "not_found",
+            "INSUFFICIENT_SCOPE:": "authentication",
+            "AUTHENTICATION_REQUIRED:": "authentication",
+            "BACKEND_AUTHENTICATION:": "authentication",
+            "BACKEND_AUTHORIZATION:": "authentication",
+            "VALIDATION_ERROR:": "invalid_input",
+            "BACKEND_TIMEOUT:": "timeout",
+            "INVALID_BACKEND_RESPONSE:": "invalid_response",
+        }
+        for marker, code in errors.items():
+            if marker in str(error):
+                return code
+    return "unavailable"
 
 
 def format_incidents(result: IncidentSuccess) -> str:

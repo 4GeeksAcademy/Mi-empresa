@@ -1,11 +1,14 @@
-"""Focused external-tool evals; HTTP stubs here are not live acceptance evidence."""
+"""Focused external-tool evals; MCP stubs here are not live acceptance evidence."""
 
 import asyncio
 import time
-from unittest.mock import Mock
+from contextlib import asynccontextmanager
+from unittest.mock import AsyncMock, Mock
 
 import httpx
 import pytest
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import ToolException
 
 from services.support_agent import graph as agent
 from services.support_agent import incidents as tool
@@ -49,37 +52,53 @@ def test_ambiguous_operational_input_requires_clarification(question):
     (401, {}, "authentication"),
     (403, {}, "authentication"),
     (503, {}, "unavailable"),
-    (302, {}, "http_error"),
+    (302, {}, "unavailable"),
     (200, {"status": "invented"}, "invalid_response"),
 ])
-def test_http_failure_contract_is_sanitized(monkeypatch, status, payload, expected):
-    original_client = httpx.AsyncClient
+def test_mcp_failure_contract_is_sanitized(monkeypatch, status, payload, expected):
+    async def invoke(call):
+        assert call["name"] == "get_incident"
+        assert call["args"] == {"ticket_id": 482}
+        if status == 404:
+            raise ToolException("NOT_FOUND: missing incident")
+        if status != 200:
+            response = httpx.Response(status, request=httpx.Request("POST", "https://mcp.example/mcp"))
+            raise httpx.HTTPStatusError("sanitized by adapter", request=response.request, response=response)
+        return ToolMessage(
+            content="", tool_call_id=call["id"], artifact={"structured_content": payload},
+        )
 
-    async def handler(request):
-        assert request.method == "GET"
-        assert request.url.path == "/api/incidents/482"
-        assert request.headers["Authorization"] == "Bearer local-unit-test"
-        return httpx.Response(status, json=payload)
+    @asynccontextmanager
+    async def session(name):
+        assert name == "trackflow"
+        yield object()
 
-    monkeypatch.setenv("TRACKFLOW_INCIDENTS_TOKEN", "local-unit-test")
-    monkeypatch.setattr(tool.httpx, "AsyncClient", lambda **kwargs: original_client(
-        **kwargs, transport=httpx.MockTransport(handler),
-    ))
+    def client(connections):
+        assert connections["trackflow"]["headers"]["Authorization"] == "Bearer local-unit-test"
+        assert connections["trackflow"]["transport"] == "streamable_http"
+        return Mock(session=session)
+
+    monkeypatch.setenv("TRACKFLOW_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("TRACKFLOW_MCP_TOKEN", "local-unit-test")
+    monkeypatch.setattr(tool, "MultiServerMCPClient", client)
+    loaded = Mock()
+    loaded.name = "get_incident"
+    loaded.ainvoke = AsyncMock(side_effect=invoke)
+    monkeypatch.setattr(tool, "load_mcp_tools", AsyncMock(return_value=[loaded]))
     result = tool.query_incidents(tool.IncidentQuery(ticket_id=482))
     assert result == {"ok": False, "error_code": expected}
     assert "local-unit-test" not in str(result)
 
 
-def test_total_http_deadline_is_effective(monkeypatch):
-    original_client = httpx.AsyncClient
-
-    async def handler(request):
+def test_total_mcp_deadline_is_effective(monkeypatch):
+    @asynccontextmanager
+    async def session(name):
         await asyncio.sleep(tool.TIMEOUT_SECONDS + 1)
-        return httpx.Response(200, json=[])
+        yield object()
 
-    monkeypatch.setattr(tool.httpx, "AsyncClient", lambda **kwargs: original_client(
-        **kwargs, transport=httpx.MockTransport(handler),
-    ))
+    monkeypatch.setenv("TRACKFLOW_MCP_URL", "https://mcp.example/mcp")
+    monkeypatch.setenv("TRACKFLOW_MCP_TOKEN", "local-unit-test")
+    monkeypatch.setattr(tool, "MultiServerMCPClient", lambda connections: Mock(session=session))
     started = time.monotonic()
     result = tool.query_incidents(tool.IncidentQuery())
     elapsed = time.monotonic() - started

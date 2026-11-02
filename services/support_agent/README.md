@@ -1,4 +1,4 @@
-# TrackFlow support agent - RAG and live incidents
+# TrackFlow support agent - RAG and MCP incidents
 
 The existing RAG is wrapped in a compiled LangGraph state machine and exposed as
 an authenticated FastAPI endpoint. Checkpoints and execution traces are persisted
@@ -32,7 +32,7 @@ For mixed questions, `incidents` runs before `retrieve`; a tool failure first
 visits `tool_fallback`. The documentation answer is appended to the real
 operational answer (or its honest fallback). RAG never replaces missing live data.
 
-## External incident tool
+## External incident tool (MCP)
 
 `incidents.py` imports `IncidentFilters` and `IncidentResponse` from the existing
 backend. `IncidentQuery` adds one positive `ticket_id`; otherwise it accepts the
@@ -41,19 +41,24 @@ multiple IDs require clarification rather than silently selecting a ticket.
 `IncidentSuccess` and `IncidentFailure` distinguish real records from sanitized
 error codes.
 
-Only GET `/api/incidents` and GET `/api/incidents/{id}` are called. There is no
+The agent loads `list_incidents` and `get_incident` with
+`langchain-mcp-adapters` over authenticated Streamable HTTP. Only the MCP server
+calls GET `/api/incidents` and GET `/api/incidents/{id}`. There is no
 write operation, second dataset, indexing of tickets or operational-record
 submission to the generation model. Responses render the API fields directly.
 Empty search results are explicitly reported, not converted into invented tickets.
 
-- `TRACKFLOW_INCIDENTS_BASE_URL`: backend URL, default `http://localhost:8000`.
-  Configure only a trusted internal backend, without embedded credentials.
-- The existing incident GET routes require **no authentication**. The agent query
-  and trace endpoints remain authenticated and owner-scoped as before.
-- `TRACKFLOW_INCIDENTS_TOKEN`: optional bearer token from the environment if an
-  authenticated gateway is used. It is not stored in graph state or traces.
+- `TRACKFLOW_MCP_URL`: required MCP URL ending in `/mcp`; HTTPS except loopback.
+- `TRACKFLOW_MCP_TOKEN`: required OAuth access token for the agent, with only
+  `mcp:access incidents:read`. Obtain and rotate it securely through the provider;
+  it is never stored in graph state or traces. No automatic refresh is implemented.
+- Old `TRACKFLOW_INCIDENTS_BASE_URL` and `TRACKFLOW_INCIDENTS_TOKEN` are no longer
+  consumed. There is no HTTP fallback or second active path to Incidents Manager.
+- The MCP server owns backend connectivity. Existing backend GET routes remain
+  unauthenticated, so keep the backend private. Agent endpoints keep their
+  original authenticated, owner-scoped behavior.
 - Each call has a **5.0-second total deadline**, including reading the response,
-  in addition to HTTPX's 5.0-second network timeouts. Redirects are not followed.
+  covering initialization, discovery, tool execution and session cleanup.
 - Timeout, network failure, 404, 401/403, server failure and malformed payloads
   enter an explicit fallback node. Logs/traces store only sanitized error codes,
   not raw provider errors or credentials. The graph still completes honestly.
@@ -65,7 +70,15 @@ and English phrases; it is a deterministic first-stage router, not an unrestrict
 semantic classifier. Singular tickets without an ID and contradictory searches
 ask for clarification. No user source-selection command is required.
 
-Inventory is intentionally omitted: it is optional and separate from this tool.
+Inventory remains outside the agent's deterministic router; the MCP server
+exposes it to other authorized clients. Agent routing is unchanged.
+
+See [MCP configuration, scopes, CLI and Playground](../../mcps/trackflow/README.md).
+The MCP and agent are independent processes; running the backend alone is not
+sufficient. Install the updated API dependencies before restarting it. The API's
+existing uv lock has not been regenerated in this change; synchronize it in an
+authorized environment before using a locked API install. The root uv lock is
+updated and was used for focused graph/MCP validation.
 
 Start and verify the existing backend from the repository root:
 

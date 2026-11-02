@@ -9,6 +9,8 @@ from sqlalchemy.dialects.postgresql import JSONB
 from sqlmodel import Field as SQLField
 from sqlmodel import Relationship, SQLModel
 
+from inventory_contracts import Warehouse
+
 
 class SupplierCountry(str, Enum):
     US = "US"
@@ -83,11 +85,6 @@ def utc_now_iso() -> str:
 
 # --- Modelos ORM (SQLModel, table=True) para inventario en Supabase ---
 # Separados semanticamente de los Pydantic de arriba: estas clases mapean tablas reales.
-
-
-class Warehouse(str, Enum):
-    LOS_ANGELES = "los_angeles"
-    ZARAGOZA = "zaragoza"
 
 
 def utc_now() -> datetime:
