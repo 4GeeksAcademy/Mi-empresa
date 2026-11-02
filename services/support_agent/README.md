@@ -1,4 +1,4 @@
-# TrackFlow support agent - graph foundation
+# TrackFlow support agent - RAG and live incidents
 
 The existing RAG is wrapped in a compiled LangGraph state machine and exposed as
 an authenticated FastAPI endpoint. Checkpoints and execution traces are persisted
@@ -13,7 +13,8 @@ suggested `data/pipelines` location. The graph imports its `retrieve` and
 `data/pipelines` is restricted by the organization's content policy.
 
 The input contains only `question`. State adds retrieved `context`, final
-`answer`, and a nullable validation `error`; it retains no conversation history.
+`answer`, a nullable validation `error`, the selected source and typed incident
+query/result; it retains no conversation history.
 The receive node validates the runtime input type and trims whitespace.
 TypedDict annotations describe node contracts; LangGraph compilation does not
 perform Python static type checking.
@@ -21,10 +22,79 @@ perform Python static type checking.
 ```text
 START -> receive -- empty question --> invalid_question -> END
                   |
-                  +-- valid --> retrieve -- no context --> no_context -> END
-                                        |
-                                        +-- context --> generate -> END
+                  +-- policy --> retrieve -- no context --> no_context -> END
+                  |                      +-- context --> generate -> END
+                  +-- operational --> incidents -- success --> incident_answer -> END
+                                              +-- failure --> tool_fallback
 ```
+
+For mixed questions, `incidents` runs before `retrieve`; a tool failure first
+visits `tool_fallback`. The documentation answer is appended to the real
+operational answer (or its honest fallback). RAG never replaces missing live data.
+
+## External incident tool
+
+`incidents.py` imports `IncidentFilters` and `IncidentResponse` from the existing
+backend. `IncidentQuery` adds one positive `ticket_id`; otherwise it accepts the
+real `status`, `origin`, `branch` and `category` filters. Contradictory filters or
+multiple IDs require clarification rather than silently selecting a ticket.
+`IncidentSuccess` and `IncidentFailure` distinguish real records from sanitized
+error codes.
+
+Only GET `/api/incidents` and GET `/api/incidents/{id}` are called. There is no
+write operation, second dataset, indexing of tickets or operational-record
+submission to the generation model. Responses render the API fields directly.
+Empty search results are explicitly reported, not converted into invented tickets.
+
+- `TRACKFLOW_INCIDENTS_BASE_URL`: backend URL, default `http://localhost:8000`.
+  Configure only a trusted internal backend, without embedded credentials.
+- The existing incident GET routes require **no authentication**. The agent query
+  and trace endpoints remain authenticated and owner-scoped as before.
+- `TRACKFLOW_INCIDENTS_TOKEN`: optional bearer token from the environment if an
+  authenticated gateway is used. It is not stored in graph state or traces.
+- Each call has a **5.0-second total deadline**, including reading the response,
+  in addition to HTTPX's 5.0-second network timeouts. Redirects are not followed.
+- Timeout, network failure, 404, 401/403, server failure and malformed payloads
+  enter an explicit fallback node. Logs/traces store only sanitized error codes,
+  not raw provider errors or credentials. The graph still completes honestly.
+
+`routing.py` selects sources locally from the question: ticket references and
+operational listing/status phrases use incidents, stable knowledge uses RAG,
+and combined policy/operational questions use both. It supports common Spanish
+and English phrases; it is a deterministic first-stage router, not an unrestricted
+semantic classifier. Singular tickets without an ID and contradictory searches
+ask for clarification. No user source-selection command is required.
+
+Inventory is intentionally omitted: it is optional and separate from this tool.
+
+Start and verify the existing backend from the repository root:
+
+```bash
+docker compose up -d backend
+curl --max-time 5 http://localhost:8000/health
+curl --max-time 5 http://localhost:8000/api/incidents
+```
+
+The full app also requires `DATABASE_URL` for inventory initialization. In this
+environment, Compose mounts telemetry at `/docs/telemetry` while the code expects
+`/app/docs/telemetry`; the checked local run uses an additional read-only mount.
+With explicit developer approval, a local SQLite database can satisfy inventory
+startup without changing the incident repository or creating tickets:
+
+```bash
+docker compose stop backend
+docker compose run -d --no-deps --service-ports \
+  --name mi-empresa-agent-local-backend \
+  -v "$PWD/docs/telemetry:/app/docs/telemetry:ro" \
+  -e DATABASE_URL=sqlite:////var/lib/trackflow/tasks/agent-local.db \
+  -e TRACKFLOW_AGENT_DATA_DIR=/var/lib/trackflow/tasks/agent-data backend
+curl --max-time 5 http://localhost:8000/health
+```
+
+This is an explicit local-development alternative, not a Supabase replacement.
+Do not run it alongside another service using port 8000. To stop it, use
+`docker stop mi-empresa-agent-local-backend`. Do not modify protected Compose or
+environment files without approval.
 
 Retrieval preserves the existing defaults: at most five valid TrackFlow payloads
 with cosine similarity >= 0.35. With no evidence, a fixed honest answer avoids
@@ -117,6 +187,47 @@ is the durable, queryable execution record. Each node update is saved before the
 next node begins, so a failed run retains the completed steps.
 
 ## Offline trace evaluations
+
+Part 2 adds `routing_tool` (one existing ticket, no RAG), `routing_rag`
+(documented policy, no tool), `routing_both` and `tool_fallback`. Evaluations inspect
+ordered actual node events, source selection and returned operational fields,
+not just response keywords. An empty live list has its own `routing_list` case;
+it **does not satisfy** the existing-ticket acceptance case.
+
+Capture real incident traces without invoking a model, then evaluate them together
+with the existing authentic policy trace:
+
+```bash
+uv run --project services/api python -m scripts.capture_incident_evals
+uv run --project services/api python -m scripts.evaluate_agent_traces \
+  --require-external \
+  .agent-data/incident-evals.json \
+  tests/pipelines/fixtures/agent-trace-returns.json
+```
+
+The capture discovers a ticket from the real list and probes a missing ID above
+the observed maximum, without creating or changing data. If the backend is empty,
+it captures list/404 diagnostics and exits nonzero; `--require-external` also
+fails because the existing-ticket case is absent. A concurrent insertion can make
+the candidate ID exist; the fallback evaluation will then be missing, not fabricated.
+
+The authentic policy fixture is prior Part 1 evidence. It verifies RAG-only
+routing but does not claim a new live RAG provider run. To capture a fresh policy
+trace, use the existing capture command below only with a provider approved to
+process those documents.
+
+Run the focused Part 2 tests:
+
+```bash
+uv run --project services/api --extra test python -m pytest \
+  tests/pipelines/test_agent_external_tools.py \
+  tests/pipelines/test_agent_graph.py tests/pipelines/test_agent_evals.py \
+  services/api/tests/test_agent.py -q
+```
+
+HTTP stubs in these tests verify error classification, read-only transport,
+authentication headers, the effective five-second deadline and mixed/fallback
+paths. They are explicitly not live-backend acceptance evidence.
 
 Run the four saved-trace evaluations from the repository root:
 

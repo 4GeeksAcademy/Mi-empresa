@@ -6,7 +6,9 @@ import sys
 from pathlib import Path
 from typing import Any
 
-from services.support_agent.evaluation import REQUIRED_CASES, evaluate_trace
+from services.support_agent.evaluation import (
+    EXTERNAL_REQUIRED_CASES, REQUIRED_CASES, evaluate_trace,
+)
 
 
 def load_traces(paths: list[Path]) -> list[dict[str, Any]]:
@@ -38,6 +40,11 @@ def evaluate_exports(paths: list[Path]) -> tuple[list[tuple[str, bool, str]], se
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
+        "--require-external",
+        action="store_true",
+        help="Require both incident-tool and RAG routing acceptance cases.",
+    )
+    parser.add_argument(
         "--require-all",
         action="store_true",
         help="Require a trace for every acceptance case (flow, empty, no-context, grounding).",
@@ -55,17 +62,22 @@ def main() -> int:
         print(f"ERROR: {exc}", file=sys.stderr)
         return 2
 
-    missing = REQUIRED_CASES - seen_cases
+    required = set()
+    if args.require_all:
+        required.update(REQUIRED_CASES)
+    if args.require_external:
+        required.update(EXTERNAL_REQUIRED_CASES)
+    missing = required - seen_cases
     for name, passed, description in results:
         print(f"{'PASS' if passed else 'FAIL'} {name}: {description}")
-    if args.require_all and missing:
+    if missing:
         print(f"FAIL missing required trace cases: {', '.join(sorted(missing))}")
     passed_count = sum(passed for _, passed, _ in results)
     print(f"{passed_count}/{len(results)} checks passed")
     return 0 if (
         results
         and all(passed for _, passed, _ in results)
-        and (not args.require_all or not missing)
+        and not missing
     ) else 1
 
 
