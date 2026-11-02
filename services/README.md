@@ -9,6 +9,8 @@ Each subfolder inside `services/` must correspond to **one specific service** (f
 
 ## Services currently available
 
+- `support_agent/` - Compiled LangGraph RAG flow with persistent SQLite checkpoints.
+	See [graph lifecycle, recovery and current scope](support_agent/README.md).
 - `knowledge/` - Commercial knowledge corpus preparation and Qdrant indexing.
 	See [configuration and current scope](knowledge/README.md).
 - `api/` - FastAPI service for incidents analysis.

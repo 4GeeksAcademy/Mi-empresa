@@ -1,0 +1,16 @@
+Command:
+uv run python -m pytest tests/pipelines/test_agent_evals.py -q
+
+Captured result:
+.......                                                                  [100%]
+7 passed
+
+Command:
+uv run python -m scripts.evaluate_agent_traces tests/pipelines/fixtures/agent-trace-returns.json
+
+Captured result:
+PASS flow: retrieve runs once before generation with its context
+PASS briefing_grounding: international returns answer cites the retrieved manual-handling policy
+2/2 checks passed
+
+The grounding result is from the checked-in authorized live trace export.

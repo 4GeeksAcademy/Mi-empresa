@@ -5,7 +5,7 @@ import json
 import logging
 import time
 from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
+from contextlib import ExitStack, asynccontextmanager
 from typing import Literal
 from uuid import UUID, uuid4
 
@@ -34,6 +34,9 @@ from routes.suppliers import router as suppliers_router
 from routes.users import router as users_router
 from routes.telemetry import router as telemetry_router
 from routes.knowledge import router as knowledge_router
+from routes.agent import router as agent_router
+from services.support_agent.graph import open_agent_graph
+from services.support_agent.traces import AgentTraceStore, agent_data_directory
 from services.reporting.routes import router as reporting_router
 from pydantic import BaseModel, ConfigDict
 
@@ -44,7 +47,20 @@ logger = logging.getLogger("trackflow_api")
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     init_inventory_db()
-    yield
+    data_directory = agent_data_directory()
+    with ExitStack() as stack:
+        graph = stack.enter_context(
+            open_agent_graph(data_directory / "agent.sqlite3")
+        )
+        traces = AgentTraceStore(data_directory / "agent.sqlite3")
+        traces.setup()
+        app.state.agent_graph = graph
+        app.state.agent_traces = traces
+        try:
+            yield
+        finally:
+            app.state.agent_graph = None
+            app.state.agent_traces = None
 
 
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)
@@ -132,6 +148,7 @@ app.include_router(profiles_router)
 app.include_router(inventory_router)
 app.include_router(telemetry_router)
 app.include_router(knowledge_router)
+app.include_router(agent_router)
 app.include_router(reporting_router)
 
 class HealthResponse(BaseModel):
