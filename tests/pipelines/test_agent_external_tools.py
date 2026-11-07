@@ -146,6 +146,7 @@ def test_both_sources_trace_orders_tool_before_rag(tmp_path, monkeypatch, succee
     trace = traces.get_for_owner(execution.trace_id, "unit-eval")
     assert evaluate_trace(trace)[0][:2] == ("routing_both", True)
     assert generate.call_args.args[1] == context
+    assert generate.call_args.kwargs["country"] is None
     assert "No afirmes ningún estado" in generate.call_args.args[0]
     if not succeeded:
         assert execution.answer.startswith(tool.FALLBACK)

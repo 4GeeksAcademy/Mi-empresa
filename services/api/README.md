@@ -52,6 +52,8 @@ autorizado debe sincronizarlo antes de instalar esta API con `--locked`.
   - Response: propuestas, decisiones y eventos auditables del propietario.
 - `POST /agent/memory/consolidate`
   - Response: cantidad eliminada por la politica de expiracion/consolidacion.
+- `GET /agent/guardrails/summary`
+  - Response: conteos en memoria de activaciones de guardrails durante la vida del proceso; requiere autenticacion.
 
 Para consultar un trace usando un `trace_id` de la respuesta autenticada:
 
@@ -80,6 +82,15 @@ Las propuestas sin confirmacion caducan a los 30 minutos, con descarte auditado
 y sin escribir recuerdos. Se comprueba al arrancar y al crear/resolver propuestas,
 consultar auditoria o consolidar. No hay temporizador en segundo plano: una
 confirmacion tardia nunca aprueba el recuerdo y no bloquea la siguiente propuesta.
+
+El agente aplica filtros deterministas de jailbreak/alcance antes de consultar
+RAG o MCP y valida la respuesta antes de exponerla. La consulta de pedidos y
+tracking falla cerrada mientras no exista un resolver de propietario de envío
+vinculado a la sesión autenticada. Ejecuta los tests del harness desde la raíz:
+
+```bash
+uv run pytest tests/pipelines/test_agent_guardrails.py tests/pipelines/test_rag.py -q
+```
 
 ## Cola de tareas (DEV-55)
 

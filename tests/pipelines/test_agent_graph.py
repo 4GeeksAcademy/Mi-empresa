@@ -34,7 +34,7 @@ def test_graph_retrieves_once_and_generates_from_the_same_context(tmp_path, monk
 
     assert [next(iter(update)) for update in updates] == ["receive", "retrieve", "generate"]
     retrieve.assert_called_once_with("¿Cómo funcionan las devoluciones internacionales?")
-    generate.assert_called_once_with(retrieve.call_args.args[0], context)
+    generate.assert_called_once_with(retrieve.call_args.args[0], context, country=None)
     assert state.values["answer"] == generate.return_value
     assert state.values["error"] is None
     assert state.next == ()

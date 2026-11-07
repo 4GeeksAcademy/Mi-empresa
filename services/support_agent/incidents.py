@@ -22,6 +22,7 @@ from services.api.incidents.models import (
     IncidentFilters,
     IncidentResponse,
 )
+from services.support_agent.guardrails import record_guardrail
 
 logger = logging.getLogger("trackflow_api.support_agent")
 TIMEOUT_SECONDS = 5.0
@@ -54,6 +55,8 @@ INCIDENT_LIST = TypeAdapter(list[IncidentResponse])
 
 def failure(code: ErrorCode) -> IncidentFailure:
     logger.warning("Incident tool failed reason=%s", code)
+    if code == "invalid_response":
+        record_guardrail("tool_structure", "structural")
     return {"ok": False, "error_code": code}
 
 
