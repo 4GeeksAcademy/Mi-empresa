@@ -13,6 +13,7 @@ from auth import get_current_user
 from database import get_engine
 from models import DepartmentSectionRecord, RfpMetadataRecord, RfpTicket
 from services.rfp_tasks import process_rfp_task
+from services.response_tasks import generate_rfp_response_task
 
 router = APIRouter(prefix="/api/rfps", tags=["rfps"])
 MAX_PDF_BYTES = 25 * 1024 * 1024
@@ -21,6 +22,12 @@ RAW_RFP_DIR = Path(os.environ.get("RFP_RAW_DIR", "/app/data/raw/rfps"))
 
 def enqueue_rfp(ticket_id: str) -> None:
     process_rfp_task.apply_async(args=[ticket_id], task_id=ticket_id)
+
+
+def enqueue_response(ticket_id: str) -> None:
+    """Parte 2: el router solo despacha; la lógica vive en el pipeline."""
+    generate_rfp_response_task.apply_async(args=[ticket_id],
+                                           task_id=f"{ticket_id}-response")
 
 
 def _ticket_response(ticket: RfpTicket, metadata: RfpMetadataRecord | None, sections: list[DepartmentSectionRecord]) -> dict:
@@ -105,4 +112,58 @@ def get_rfp_analysis(ticket_id: UUID, current_user: dict = Depends(get_current_u
         return ticket.synthesizer_payload or {
             "ticket_id": str(ticket.ticket_id), "status": ticket.status,
             "classification": {"is_rfp": ticket.classification_result, "reason": ticket.classification_reason},
+        }
+
+
+@router.post("/{ticket_id}/response", status_code=202)
+def start_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
+    """Handoff Parte 1 → Parte 2: solo se lanza desde `analisis_completo`."""
+    with Session(get_engine()) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or ticket.owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        if ticket.status != "analisis_completo":
+            raise HTTPException(status_code=409,
+                                detail=f"El ticket está en estado {ticket.status}; "
+                                       "la generación parte de analisis_completo.")
+        if not ticket.synthesizer_payload:
+            raise HTTPException(status_code=409, detail="Falta el handoff del synthesizer.")
+        # El estado se persiste aquí para que el polling no dependa del worker.
+        ticket.status = "generando_borrador"
+        ticket.updated_at = datetime.now(timezone.utc)
+        session.add(ticket)
+        session.commit()
+    try:
+        enqueue_response(str(ticket_id))
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"ticket_id": str(ticket_id),
+                                                    "message": "No se pudo confirmar el encolado."}) from exc
+    return {"ticket_id": str(ticket_id), "status": "generando_borrador"}
+
+
+@router.get("/{ticket_id}/response")
+def get_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
+    """Handoff Parte 2 → Parte 3: borradores + EvaluationResult por departamento."""
+    with Session(get_engine()) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or ticket.owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        sections = session.exec(select(DepartmentSectionRecord).where(
+            DepartmentSectionRecord.ticket_id == ticket_id)).all()
+        return {
+            "ticket_id": str(ticket.ticket_id),
+            "status": ticket.status,
+            "handoff": ticket.response_handoff,
+            "sections": [
+                {
+                    "department_id": section.department_id,
+                    "approver": section.approver,
+                    "draft_content": section.draft_content,
+                    "evaluation_results": section.evaluation_results,
+                    "approval_status": section.approval_status,
+                    "iteration_count": section.iteration_count,
+                    "needs_human_review": section.needs_human_review,
+                }
+                for section in sections
+            ],
         }
