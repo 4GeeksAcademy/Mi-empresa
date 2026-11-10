@@ -122,6 +122,24 @@ def evaluate_readability(section_text: str, context: dict[str, Any]) -> dict[str
     return {"pass": passed, "score": score, "details": details}
 
 
+def _emit_progress(
+    on_progress: Callable[[str, dict[str, Any]], None] | None,
+    phase: str,
+    payload: dict[str, Any],
+) -> None:
+    """Avisa al llamante (la tarea de Celery) de la fase del ciclo.
+
+    El pipeline sigue sin tocar la base de datos: solo notifica. Un callback
+    que falle no debe romper la generación.
+    """
+    if on_progress is None:
+        return
+    try:
+        on_progress(phase, payload)
+    except Exception:  # pragma: no cover - defensa del bucle de generación
+        logger.exception("Progress callback failed phase=%s", phase)
+
+
 def _strip_tables(text: str) -> str:
     """Las tablas Markdown y los encabezados no son prosa: Flesch solo mide frases."""
     lines = [
@@ -516,6 +534,7 @@ def run_section_cycle(
     max_iterations: int | None = None,
     generate: Callable[[dict[str, Any]], str] | None = None,
     evaluate: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+    on_progress: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Genera y evalúa una sección hasta que pase o se agote el límite."""
     limit = max_iterations or default_max_iterations()
@@ -527,6 +546,8 @@ def run_section_cycle(
     draft = ""
     for attempt in range(1, limit + 1):
         context["iteration"] = attempt
+        _emit_progress(on_progress, "generacion", {
+            "department_id": department_id, "iteration": attempt})
         draft = generator(context)
         evaluate_context = {
             "key_aspects": context["key_aspects"],
@@ -534,6 +555,9 @@ def run_section_cycle(
             "department_id": department_id,
         }
         evaluation = evaluator(draft, evaluate_context)
+        _emit_progress(on_progress, "evaluacion", {
+            "department_id": department_id, "iteration": attempt,
+            "overall_pass": bool(evaluation.get("overall_pass"))})
         if evaluation.get("overall_pass"):
             break
         context["feedback"] = evaluation.get("feedback_for_generator", "")
@@ -561,6 +585,7 @@ def run_response_generation(
     max_iterations: int | None = None,
     generate: Callable[[dict[str, Any]], str] | None = None,
     evaluate: Callable[[str, dict[str, Any]], dict[str, Any]] | None = None,
+    on_progress: Callable[[str, dict[str, Any]], None] | None = None,
 ) -> dict[str, Any]:
     """Ejecuta el ciclo para todos los departamentos activos del handoff.
 
@@ -577,7 +602,8 @@ def run_response_generation(
     sections: list[dict[str, Any]] = []
 
     def _run(workstream: dict[str, Any]) -> dict[str, Any]:
-        result = run_section_cycle(handoff, workstream, max_iterations, generate, evaluate)
+        result = run_section_cycle(handoff, workstream, max_iterations,
+                                   generate, evaluate, on_progress)
         with lock:
             sections.append(result)
         return result

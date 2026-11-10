@@ -20,6 +20,7 @@ COPY services/celery_app.py services/incident_tasks.py services/task_store.py /a
 COPY scripts /app/scripts
 COPY data/pipelines /app/data/pipelines
 COPY services/rfp_tasks.py /app/services/rfp_tasks.py
+COPY services/response_tasks.py /app/services/response_tasks.py
 COPY data/process /app/data/process
 COPY docs/telemetry /app/docs/telemetry
 COPY docs/company-knowledge-base /app/docs/company-knowledge-base

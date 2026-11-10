@@ -172,6 +172,21 @@ def test_iteration_limit_keeps_last_draft_and_flags_needs_human_review():
     assert result["evaluation_results"]["overall_pass"] is False
 
 
+def test_progress_callback_reports_live_phases_in_order():
+    """El llamante ve generacion → evaluacion en tiempo real (ticket en vivo)."""
+    phases: list[tuple[str, str]] = []
+
+    def on_progress(phase: str, payload: dict) -> None:
+        phases.append((phase, payload["department_id"]))
+
+    run_response_generation(HANDOFF, max_iterations=1, on_progress=on_progress)
+
+    assert phases[0] == ("generacion", "warehouse")
+    assert {"generacion", "evaluacion"} == {phase for phase, _ in phases}
+    # una fase por intento y departamento, sin colapsar en el estado final
+    assert len(phases) == 2 * len(HANDOFF["department_workstreams"])
+
+
 def test_part3_handoff_contains_content_and_evaluation_per_department():
     output = run_response_generation(HANDOFF, max_iterations=3)
 
