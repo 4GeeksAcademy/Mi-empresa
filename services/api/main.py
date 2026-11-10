@@ -35,6 +35,7 @@ from routes.users import router as users_router
 from routes.telemetry import router as telemetry_router
 from routes.knowledge import router as knowledge_router
 from routes.agent import router as agent_router
+from routes.rfp import router as rfp_router
 from services.support_agent.graph import open_agent_graph
 from services.support_agent.memory import AgentMemoryStore
 from services.support_agent.traces import AgentTraceStore, agent_data_directory
@@ -155,6 +156,7 @@ app.include_router(telemetry_router)
 app.include_router(knowledge_router)
 app.include_router(agent_router)
 app.include_router(reporting_router)
+app.include_router(rfp_router)
 
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")

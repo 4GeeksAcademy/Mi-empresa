@@ -88,6 +88,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Base de conocimiento
             </Link>
             <Link
+              href="/rfps"
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Recepción de RFPs
+            </Link>
+            <Link
               href="/account/profile"
               className="ml-auto rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >
