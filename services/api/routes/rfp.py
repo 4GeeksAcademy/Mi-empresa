@@ -1,12 +1,15 @@
 from __future__ import annotations
 
+import asyncio
+import json
 import os
 import re
 from datetime import datetime, timezone
 from pathlib import Path
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
+from fastapi import APIRouter, Depends, File, HTTPException, Query, UploadFile
+from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from auth import get_current_user
@@ -59,14 +62,115 @@ def _ticket_response(ticket: RfpTicket, metadata: RfpMetadataRecord | None, sect
         "ticket_id": str(ticket.ticket_id),
         "rfp_id": str(ticket.rfp_id),
         "status": ticket.status,
-        "filename": ticket.original_filename,
         "created_at": ticket.created_at.isoformat(),
+        "accepted_at": ticket.accepted_at.isoformat() if ticket.accepted_at else None,
+        "filename": ticket.original_filename,
         "classification": {"is_rfp": ticket.classification_result, "reason": ticket.classification_reason},
         "processing_error": ticket.processing_error,
         "metadata": metadata.model_dump(mode="json") if metadata else None,
         "department_sections": [section.model_dump(mode="json") for section in sections],
         "handoff": ticket.synthesizer_payload,
     }
+
+
+def _ticket_created_payload(ticket: RfpTicket, metadata: RfpMetadataRecord | None) -> dict:
+    """Build the small public payload without exposing the uploaded document."""
+    return {
+        "ticket_id": str(ticket.ticket_id),
+        "rfp_id": str(ticket.rfp_id),
+        "client_name": metadata.client_name if metadata else None,
+        "client_country": metadata.client_country if metadata else None,
+        "services_requested": metadata.services_requested if metadata else [],
+        # This is the initial state named by the TrackFlow real-time briefing.
+        "status": "analyzing",
+        "created_at": (ticket.accepted_at or ticket.created_at).isoformat(),
+    }
+
+
+def _new_rfp_tickets(owner_id: str, created_after: datetime, ticket_after: UUID) -> list[tuple[RfpTicket, RfpMetadataRecord | None]]:
+    with Session(get_engine()) as session:
+        tickets = session.exec(
+            select(RfpTicket)
+            .where(
+                RfpTicket.owner_id == owner_id,
+                RfpTicket.classification_result.is_(True),
+                RfpTicket.accepted_at.is_not(None),
+                (RfpTicket.accepted_at > created_after)
+                | ((RfpTicket.accepted_at == created_after) & (RfpTicket.ticket_id > ticket_after)),
+            )
+            .order_by(RfpTicket.accepted_at, RfpTicket.ticket_id)
+        ).all()
+        return [(ticket, session.get(RfpMetadataRecord, ticket.ticket_id)) for ticket in tickets]
+
+
+async def _rfp_event_stream(owner_id: str, created_after: datetime):
+    last_created_at = created_after
+    last_ticket_id = UUID(int=0)
+    last_keep_alive = datetime.now(timezone.utc)
+    while True:
+        tickets = await asyncio.to_thread(
+            _new_rfp_tickets, owner_id, last_created_at, last_ticket_id
+        )
+        for ticket, metadata in tickets:
+            payload = json.dumps(_ticket_created_payload(ticket, metadata), separators=(",", ":"))
+            yield f"id: {ticket.ticket_id}\nevent: rfp_ticket_created\ndata: {payload}\n\n"
+            last_created_at, last_ticket_id = ticket.accepted_at, ticket.ticket_id
+
+        now = datetime.now(timezone.utc)
+        if (now - last_keep_alive).total_seconds() >= 15:
+            yield ": keep-alive\n\n"
+            last_keep_alive = now
+        await asyncio.sleep(1)
+
+
+@router.get("/events")
+def stream_rfp_tickets(
+    since: datetime | None = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+) -> StreamingResponse:
+    """Stream owner-scoped tickets registered after the supplied snapshot cursor."""
+    cursor = since or datetime.now(timezone.utc)
+    return StreamingResponse(
+        _rfp_event_stream(str(current_user["id"]), cursor),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache, no-transform",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        },
+    )
+
+
+@router.get("")
+def list_rfp_tickets(
+    created_after: datetime | None = Query(default=None),
+    current_user: dict = Depends(get_current_user),
+) -> list[dict]:
+    """Return owner-scoped snapshots; created_after supports complete reconnect recovery."""
+    with Session(get_engine()) as session:
+        statement = select(RfpTicket).where(
+            RfpTicket.owner_id == str(current_user["id"]),
+            RfpTicket.classification_result.is_(True),
+            RfpTicket.accepted_at.is_not(None),
+        )
+        if created_after is not None:
+            statement = statement.where(RfpTicket.accepted_at >= created_after)
+        tickets = session.exec(statement.order_by(RfpTicket.accepted_at.desc())).all()
+        return [
+            {
+                **_ticket_response(
+                ticket,
+                session.get(RfpMetadataRecord, ticket.ticket_id),
+                session.exec(
+                    select(DepartmentSectionRecord).where(
+                        DepartmentSectionRecord.ticket_id == ticket.ticket_id
+                    )
+                ).all(),
+                ),
+                "accepted_at": ticket.accepted_at.isoformat() if ticket.accepted_at else None,
+            }
+            for ticket in tickets
+        ]
 
 
 @router.post("", status_code=202)
