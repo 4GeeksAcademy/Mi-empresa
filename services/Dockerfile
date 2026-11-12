@@ -19,7 +19,7 @@ COPY services/job_runner.py /app/services/job_runner.py
 COPY services/celery_app.py services/incident_tasks.py services/task_store.py /app/services/
 COPY scripts /app/scripts
 COPY data/pipelines /app/data/pipelines
-COPY services/rfp_tasks.py /app/services/rfp_tasks.py
+COPY services/rfp_graph.py services/rfp_tasks.py services/rfp_approval_tasks.py /app/services/
 COPY services/response_tasks.py /app/services/response_tasks.py
 COPY data/process /app/data/process
 COPY docs/telemetry /app/docs/telemetry

@@ -2,6 +2,28 @@
 
 Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
 
+## Flujo agentico de RFP (Hito 9, Parte 3)
+
+- Con Docker Compose, `backend` y `worker` esperan a que el servicio
+  `rfp-migrate` termine correctamente. Este ejecuta
+  las migraciones RFP `20261024_rfp_intake.sql`,
+  `20261110_rfp_response_generation.sql` y `20261201_rfp_approval.sql` en orden
+  y de forma idempotente con `DATABASE_URL`;
+  si la migración falla, API y worker no arrancan. Para ejecutarla manualmente:
+  `docker compose run --rm rfp-migrate`.
+- Compose monta el volumen nombrado `rfp_checkpoints` en
+  `/app/data/checkpoints` tanto en API como worker. Allí persiste el
+  checkpointer reanudable de LangGraph (`rfp_approval.db`); no eliminar el
+  volumen durante un despliegue o una recreación de contenedores, pues se
+  perdería el estado necesario para reanudar aprobaciones pendientes.
+- La UI inicia `POST /api/rfps/{ticket_id}/approvals` tras Parte 2 y consulta
+  `GET .../approvals`; cada decisión se publica a
+  `POST .../approvals/{department}` con `interrupt_id` y responsable. Cada rama
+  departamental se pausa de forma independiente. `GET .../final-document` solo
+  entrega el documento una vez que las aprobaciones activas terminan.
+- Ejecución focalizada: `uv run --project services/api --extra test python -m
+  pytest services/api/tests/test_rfp.py tests/pipelines/test_rfp_approval.py -q`.
+
 ## Integracion MCP y dependencias
 
 El agente consulta incidencias exclusivamente mediante MCP; requiere

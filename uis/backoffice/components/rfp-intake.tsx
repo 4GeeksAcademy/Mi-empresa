@@ -2,6 +2,8 @@
 
 import { FormEvent, useEffect, useState } from "react";
 
+import { RfpApprovals } from "./rfp-approvals";
+
 type Ticket = {
   ticket_id: string;
   status: string;
@@ -73,6 +75,9 @@ export function RfpIntake() {
         <p className="text-sm"><strong>Ticket:</strong> {ticket.ticket_id} · <strong>Estado:</strong> {ticket.status} · {ticket.filename}</p>
         {ticket.processing_error && <p role="alert" className="text-sm text-red-700">{ticket.processing_error}</p>}
         {ticket.status !== "analizando" && <p className="text-sm">{ticket.classification.is_rfp ? "RFP aceptada" : "Documento descartado"} · {ticket.classification.reason}</p>}
+        {ticket.classification.is_rfp && ticket.status !== "analizando" && ticket.status !== "analisis_completo" && ticket.status !== "generando_borrador" && (
+          <RfpApprovals ticketId={ticket.ticket_id} status={ticket.status} />
+        )}
         {ticket.metadata && <div className="space-y-2 text-sm">
           <h2 className="font-semibold">Datos extraídos</h2>
           <p>Cliente: {ticket.metadata.client_name ?? "No identificado"} · País: {ticket.metadata.client_country ?? "No identificado"} · Volumen mensual: {ticket.metadata.monthly_volume ?? "No indicado"} · Moneda: {ticket.metadata.currency ?? "No determinada"}</p>

@@ -10,14 +10,23 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from sqlmodel import Session, select
 
 from auth import get_current_user
+from data.pipelines.rfp_intake.approval import (
+    DecisionValidationError,
+    validate_decision,
+)
 from database import get_engine
 from models import DepartmentSectionRecord, RfpMetadataRecord, RfpTicket
+from services.rfp_approval_tasks import approval_snapshot
 from services.rfp_tasks import process_rfp_task
 from services.response_tasks import generate_rfp_response_task
 
 router = APIRouter(prefix="/api/rfps", tags=["rfps"])
 MAX_PDF_BYTES = 25 * 1024 * 1024
 RAW_RFP_DIR = Path(os.environ.get("RFP_RAW_DIR", "/app/data/raw/rfps"))
+# Estados desde los que la Parte 3 puede arrancar (resultado de la Parte 2).
+APPROVAL_START_STATUSES = {"needs_human_review", "en_evaluación"}
+APPROVAL_STATUS = "esperando_aprobación"
+TERMINATED_STATUS = "terminado"
 
 
 def enqueue_rfp(ticket_id: str) -> None:
@@ -28,6 +37,21 @@ def enqueue_response(ticket_id: str) -> None:
     """Parte 2: el router solo despacha; la lógica vive en el pipeline."""
     generate_rfp_response_task.apply_async(args=[ticket_id],
                                            task_id=f"{ticket_id}-response")
+
+
+def enqueue_approvals(ticket_id: str) -> None:
+    """Parte 3: solo se despacha; la lógica vive en services + pipeline."""
+    from services.rfp_approval_tasks import start_rfp_approvals_task
+    start_rfp_approvals_task.apply_async(args=[ticket_id],
+                                         task_id=f"{ticket_id}-approvals")
+
+
+def enqueue_decision(ticket_id: str, department: str, payload: dict) -> None:
+    """Punto de entrada explícito de `resume` (nunca reinicio completo)."""
+    from services.rfp_approval_tasks import record_rfp_decision_task
+    record_rfp_decision_task.apply_async(
+        args=[ticket_id, department, payload],
+        task_id=f"{ticket_id}-decision-{department}")
 
 
 def _ticket_response(ticket: RfpTicket, metadata: RfpMetadataRecord | None, sections: list[DepartmentSectionRecord]) -> dict:
@@ -166,4 +190,121 @@ def get_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current_u
                 }
                 for section in sections
             ],
+        }
+
+
+# --------------------------------------------------------------------------
+# Parte 3: aprobación humana y cierre del documento
+# --------------------------------------------------------------------------
+def _owned_ticket(ticket_id: UUID, current_user: dict) -> RfpTicket:
+    with Session(get_engine()) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or ticket.owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        return ticket
+
+
+@router.post("/{ticket_id}/approvals", status_code=202)
+def start_rfp_approvals(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
+    """Handoff Parte 2 → Parte 3: ramas de aprobación en paralelo por depto."""
+    previous_status: str
+    with Session(get_engine()) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or ticket.owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        if ticket.status == APPROVAL_STATUS:
+            raise HTTPException(status_code=409, detail="Las aprobaciones ya están en curso.")
+        if ticket.status == TERMINATED_STATUS:
+            raise HTTPException(status_code=409, detail="El ticket ya está terminado.")
+        if ticket.status not in APPROVAL_START_STATUSES:
+            raise HTTPException(
+                status_code=409,
+                detail=f"El ticket está en estado {ticket.status}; la aprobación "
+                       "parte de las secciones evaluadas (Parte 2).")
+        if not ticket.response_handoff:
+            raise HTTPException(status_code=409, detail="Falta el handoff de la Parte 2.")
+        if ticket.classification_result is not True:
+            raise HTTPException(status_code=409,
+                                detail="Solo se pueden aprobar RFPs clasificadas como válidas.")
+        # El estado se persiste aquí para que el polling no dependa del worker.
+        previous_status = ticket.status
+        ticket.status = APPROVAL_STATUS
+        ticket.updated_at = datetime.now(timezone.utc)
+        session.add(ticket)
+        session.commit()
+    try:
+        enqueue_approvals(str(ticket_id))
+    except Exception as exc:
+        # Evita dejar el ticket en un estado que rechace el reintento cuando el
+        # broker no confirmó la publicación. No pisa un cambio hecho por worker.
+        with Session(get_engine()) as session:
+            ticket = session.get(RfpTicket, ticket_id)
+            if ticket is not None and ticket.status == APPROVAL_STATUS:
+                ticket.status = previous_status
+                ticket.updated_at = datetime.now(timezone.utc)
+                session.add(ticket)
+                session.commit()
+        raise HTTPException(status_code=503, detail={"ticket_id": str(ticket_id),
+                                                    "message": "No se pudo confirmar el encolado."}) from exc
+    return {"ticket_id": str(ticket_id), "status": APPROVAL_STATUS}
+
+
+@router.get("/{ticket_id}/approvals")
+def get_rfp_approvals(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
+    """Snapshot mínimo por responsable: sección, evaluación, flags e interrupt."""
+    _owned_ticket(ticket_id, current_user)
+    snapshot = approval_snapshot(ticket_id)
+    if snapshot is None:
+        raise HTTPException(status_code=404, detail="Las aprobaciones aún no han arrancado.")
+    return snapshot
+
+
+@router.post("/{ticket_id}/approvals/{department}")
+def record_rfp_decision(ticket_id: UUID, department: str, payload: dict,
+                        current_user: dict = Depends(get_current_user)) -> dict:
+    """Punto de entrada explícito del `resume`: aprueba/rechaza una sección.
+
+    El router solo valida y despacha; la validación profunda (decisión, aprobador
+    fijo del briefing y comentario obligatorio) y el `Command(resume=...)` viven
+    en services/rfp_approval_tasks + data/pipelines/rfp_intake/approval.
+    """
+    ticket = _owned_ticket(ticket_id, current_user)
+    if ticket.status != APPROVAL_STATUS:
+        raise HTTPException(status_code=409,
+                            detail="No hay un ciclo de aprobación activo para este ticket.")
+    if not isinstance(payload, dict):
+        raise HTTPException(status_code=400, detail="Payload inválido.")
+    if payload.get("decision") not in {"aprobar", "rechazar", "request_changes"}:
+        raise HTTPException(status_code=400,
+                            detail="La decisión debe ser aprobar, rechazar o request_changes.")
+    if not payload.get("interrupt_id"):
+        raise HTTPException(status_code=400, detail="Falta interrupt_id de la decisión pendiente.")
+    try:
+        validate_decision(payload, department)
+    except DecisionValidationError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    try:
+        enqueue_decision(str(ticket_id), department, payload)
+    except Exception as exc:
+        raise HTTPException(status_code=503, detail={"ticket_id": str(ticket_id),
+                                                    "message": "No se pudo confirmar el encolado."}) from exc
+    return {"ticket_id": str(ticket_id), "department": department,
+            "decision": payload["decision"], "status": APPROVAL_STATUS}
+
+
+@router.get("/{ticket_id}/final-document")
+def get_rfp_final_document(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
+    """Documento final consolidado: solo existe con todas las secciones aprobadas."""
+    with Session(get_engine()) as session:
+        ticket = session.get(RfpTicket, ticket_id)
+        if ticket is None or ticket.owner_id != str(current_user["id"]):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        if ticket.status != TERMINATED_STATUS or not ticket.final_document:
+            raise HTTPException(status_code=409,
+                                detail="El documento final aún no está disponible; "
+                                       "faltan aprobaciones.")
+        return {
+            "ticket_id": str(ticket.ticket_id),
+            "status": ticket.status,
+            "document": ticket.final_document,
         }

@@ -11,7 +11,7 @@ app = Celery(
     broker=redis_url,
     backend=redis_url,
     include=["services.incident_tasks", "services.rfp_tasks",
-             "services.response_tasks"],
+             "services.response_tasks", "services.rfp_approval_tasks"],
 )
 app.conf.update(
     task_serializer="json",
