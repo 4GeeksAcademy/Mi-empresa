@@ -1,4 +1,7 @@
 import io
+import json
+import asyncio
+from datetime import datetime, timezone
 from uuid import UUID
 
 import pytest
@@ -9,7 +12,7 @@ from sqlmodel import SQLModel, Session, create_engine, select
 from auth import get_current_user
 from database import get_engine
 from main import app
-from models import RfpNodeTrace, RfpTicket
+from models import RfpMetadataRecord, RfpNodeTrace, RfpTicket
 from services.rfp_approval_tasks import approval_snapshot
 from services.rfp_tasks import process_rfp_task
 
@@ -58,6 +61,149 @@ def test_pdf_validation_and_owner_isolation(rfp_client, monkeypatch):
     assert client.get(f"/api/rfps/{created['ticket_id']}").status_code == 404
 
 
+def test_rfp_sse_stream_uses_named_event_and_briefing_payload(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf", "application/pdf")}).json()
+    assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).json() == []
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+        ticket.classification_result = True
+        ticket.accepted_at = datetime.now(timezone.utc)
+        session.add(RfpMetadataRecord(
+            ticket_id=ticket.ticket_id, client_name="Northline Apparel", client_country="US",
+            services_requested=["warehouse", "lastmile"],
+        ))
+        session.commit()
+    original_stream = rfp_route._rfp_event_stream
+
+    async def one_event(owner_id: str, cursor: datetime):
+        stream = original_stream(owner_id, cursor)
+        try:
+            yield await anext(stream)
+        finally:
+            await stream.aclose()
+
+    monkeypatch.setattr(rfp_route, "_rfp_event_stream", one_event)
+    with Session(engine) as session:
+        persisted_ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+        expected_created_at = persisted_ticket.accepted_at.isoformat()
+
+    import routes.rfp as rfp_route
+    response = rfp_route.stream_rfp_tickets(
+        since=datetime.fromisoformat("2000-01-01T00:00:00+00:00"), current_user={"id": 42}
+    )
+    assert response.media_type == "text/event-stream"
+    assert response.headers["cache-control"] == "no-cache, no-transform"
+    first_chunk = asyncio.run(anext(response.body_iterator))
+    asyncio.run(response.body_iterator.aclose())
+    frame = first_chunk.decode() if isinstance(first_chunk, bytes) else first_chunk
+    assert f"id: {created['ticket_id']}\nevent: rfp_ticket_created\ndata: " in frame
+    data_line = next(line[6:] for line in frame.splitlines() if line.startswith("data: "))
+    assert json.loads(data_line) == {
+        "ticket_id": created["ticket_id"], "rfp_id": created["rfp_id"],
+        "client_name": "Northline Apparel", "client_country": "US",
+        "services_requested": ["warehouse", "lastmile"], "status": "analyzing",
+        "created_at": expected_created_at,
+    }
+    assert "raw_pdf_path" not in data_line and "filename" not in data_line
+    assert response.headers["content-type"].startswith("text/event-stream")
+
+
+def test_rfp_snapshot_recovery_is_owner_scoped_and_filters_created_after(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf", "application/pdf")}).json()
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+        ticket.classification_result = True
+        ticket.accepted_at = datetime.now(timezone.utc)
+        session.commit()
+    response = client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"})
+    assert response.status_code == 200
+    assert [item["ticket_id"] for item in response.json()] == [created["ticket_id"]]
+    assert response.json()[0]["accepted_at"] is not None
+    accepted_at = response.json()[0]["accepted_at"]
+    assert [item["ticket_id"] for item in client.get(
+        "/api/rfps", params={"created_after": accepted_at}
+    ).json()] == [created["ticket_id"]]
+    assert client.get("/api/rfps", params={"created_after": "2999-01-01T00:00:00Z"}).json() == []
+
+    app.dependency_overrides[get_current_user] = lambda: {"id": 7}
+    assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).json() == []
+
+
+def test_rejected_document_is_not_recoverable_as_new_rfp(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    import services.rfp_tasks as rfp_tasks
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("pitch.pdf", b"pdf", "application/pdf")}).json()
+    monkeypatch.setattr(rfp_tasks, "convert_pdf_to_markdown", lambda _pdf, markdown: "carrier sales presentation")
+    monkeypatch.setattr(rfp_tasks, "classify_document", lambda _markdown: (False, "carrier_pitch"))
+    monkeypatch.setattr(rfp_tasks, "process_rfp_markdown", lambda _markdown, _path, **_kwargs: pytest.fail(
+        "Rejected documents must not continue into graph processing"
+    ))
+    result = process_rfp_task.apply(args=[created["ticket_id"]], task_id=created["ticket_id"])
+    assert result.successful(), str(result.result)
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+        assert ticket.classification_result is False
+        assert ticket.accepted_at is None
+    assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).json() == []
+
+
+def test_accepted_ticket_is_persisted_before_graph_processing(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    import services.rfp_tasks as rfp_tasks
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf", "application/pdf")}).json()
+    monkeypatch.setattr(rfp_tasks, "convert_pdf_to_markdown", lambda _pdf, markdown: "customer needs warehousing logistics")
+    monkeypatch.setattr(rfp_tasks, "classify_document", lambda _markdown: (True, "customer_request"))
+    metadata = {
+        "client_name": "Northline Apparel", "client_country": "US", "services_requested": ["warehouse"],
+        "unknown_services": [], "monthly_volume": None, "monthly_volume_unit": None, "deadline": None,
+        "budget_range": None, "departments_needed": ["warehouse"], "currency": "USD",
+    }
+    monkeypatch.setattr(rfp_tasks, "extract_metadata", lambda _markdown: metadata.copy())
+    monkeypatch.setattr(rfp_tasks, "readability_metrics", lambda _markdown: {"word_count": 12, "readable": True})
+
+    def finish_graph(_markdown, _path, **kwargs):
+        with Session(engine) as session:
+            ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+            assert ticket.classification_result is True
+            assert ticket.accepted_at is not None
+            assert session.get(RfpMetadataRecord, ticket.ticket_id) is not None
+        assert kwargs["accepted"] is True
+        assert kwargs["metadata"]["client_name"] == "Northline Apparel"
+        return {"accepted": True, "reason": "customer_request", "markdown_path": "request.md",
+                "metadata": metadata, "department_sections": [],
+                "handoff": {"ticket_id": None, "metadata": {}, "department_workstreams": [], "contract_version": "1.0"}}
+
+    monkeypatch.setattr(rfp_tasks, "process_rfp_markdown", finish_graph)
+    result = process_rfp_task.apply(args=[created["ticket_id"]], task_id=created["ticket_id"])
+    assert result.successful(), str(result.result)
+
+
+def test_rfp_sse_requires_authentication(rfp_client):
+    client, _, _ = rfp_client
+    app.dependency_overrides.clear()
+    assert client.get("/api/rfps/events").status_code == 401
+
+
+def test_migration_runner_includes_sse_acceptance_migration():
+    from apply_rfp_approval_migration import MIGRATIONS
+
+    assert "20261112_rfp_sse_acceptance.sql" in MIGRATIONS
+    assert MIGRATIONS.index("20261024_rfp_intake.sql") < MIGRATIONS.index("20261112_rfp_sse_acceptance.sql")
+    assert MIGRATIONS.index("20261110_rfp_response_generation.sql") < MIGRATIONS.index("20261112_rfp_sse_acceptance.sql")
+
+
 def test_worker_persists_metadata_workstreams_and_handoff(rfp_client, monkeypatch):
     client, engine, _ = rfp_client
     import routes.rfp as rfp_route
@@ -67,7 +213,14 @@ def test_worker_persists_metadata_workstreams_and_handoff(rfp_client, monkeypatc
     response = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf", "application/pdf")})
     ticket_id = response.json()["ticket_id"]
     monkeypatch.setattr(rfp_tasks, "convert_pdf_to_markdown", lambda _pdf, markdown: "converted markdown")
-    monkeypatch.setattr(rfp_tasks, "process_rfp_markdown", lambda _markdown, markdown_path: {
+    monkeypatch.setattr(rfp_tasks, "classify_document", lambda _markdown: (True, "customer_request_with_logistics_scope"))
+    monkeypatch.setattr(rfp_tasks, "extract_metadata", lambda _markdown: {
+        "client_name": "ModaViva", "client_country": "Spain", "services_requested": ["warehouse", "reverse"],
+        "unknown_services": [], "monthly_volume": None, "monthly_volume_unit": None, "deadline": None,
+        "budget_range": None, "departments_needed": ["warehouse", "reverse"], "currency": "EUR",
+    })
+    monkeypatch.setattr(rfp_tasks, "readability_metrics", lambda _markdown: {"word_count": 30, "readable": True})
+    monkeypatch.setattr(rfp_tasks, "process_rfp_markdown", lambda _markdown, markdown_path, **_kwargs: {
         "accepted": True,
         "reason": "customer_request_with_logistics_scope",
         "markdown_path": str(markdown_path),
@@ -85,6 +238,7 @@ def test_worker_persists_metadata_workstreams_and_handoff(rfp_client, monkeypatc
     assert result.successful(), str(result.result)
     polled = client.get(f"/api/rfps/{ticket_id}").json()
     assert polled["status"] == "analisis_completo"
+    assert polled["accepted_at"] is not None
     assert polled["metadata"]["currency"] == "EUR"
     assert [section["department_id"] for section in polled["department_sections"]] == ["warehouse"]
     assert polled["handoff"]["ticket_id"] == ticket_id

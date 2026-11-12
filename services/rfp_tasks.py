@@ -11,6 +11,7 @@ from sqlmodel import Session, select
 
 from database import get_engine
 from data.pipelines.rfp_intake.pipeline import convert_pdf_to_markdown
+from data.pipelines.rfp_intake.pipeline import classify_document, extract_metadata, readability_metrics
 from services.rfp_graph import process_rfp_markdown
 from models import DepartmentSectionRecord, RfpMetadataRecord, RfpTicket
 
@@ -31,13 +32,51 @@ def process_rfp_task(self, ticket_id: str) -> dict:
             raw_path = Path(ticket.raw_pdf_path)
             markdown_path = RAW_RFP_DIR / str(ticket.owner_id) / f"{identifier}.md"
             markdown = convert_pdf_to_markdown(raw_path, markdown_path)
-            result = process_rfp_markdown(markdown, str(markdown_path))
+
+            # Classify and persist the acceptance boundary before the rest of the
+            # workflow (department routing/synthesis) runs. SSE observes this
+            # committed state and can notify immediately while processing continues.
+            accepted, reason = classify_document(markdown)
+            ticket.markdown_path = str(markdown_path)
+            ticket.classification_result = accepted
+            ticket.classification_reason = reason
+            ticket.updated_at = datetime.now(timezone.utc)
+            ticket.processing_error = None
+            if not accepted:
+                ticket.accepted_at = None
+                ticket.status = "descartado"
+                session.add(ticket)
+                session.commit()
+                return {"ticket_id": ticket_id, "status": ticket.status}
+
+            ticket.accepted_at = ticket.updated_at
+            early_metadata = extract_metadata(markdown)
+            early_metadata["readability_metrics"] = readability_metrics(markdown)
+            existing_metadata = session.get(RfpMetadataRecord, identifier)
+            if existing_metadata:
+                for key, value in early_metadata.items():
+                    setattr(existing_metadata, key, value)
+                session.add(existing_metadata)
+            else:
+                session.add(RfpMetadataRecord(ticket_id=identifier, **early_metadata))
+            session.add(ticket)
+            session.commit()
+
+            result = process_rfp_markdown(
+                markdown,
+                str(markdown_path),
+                accepted=True,
+                reason=reason,
+                metadata=early_metadata,
+                metrics=early_metadata["readability_metrics"],
+            )
             ticket.markdown_path = str(markdown_path)
             ticket.classification_result = result["accepted"]
             ticket.classification_reason = result["reason"]
             ticket.updated_at = datetime.now(timezone.utc)
             ticket.processing_error = None
             if not result["accepted"]:
+                ticket.accepted_at = None
                 ticket.status = "descartado"
             else:
                 metadata = result["metadata"]

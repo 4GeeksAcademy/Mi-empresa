@@ -26,11 +26,15 @@ class RfpGraphState(TypedDict, total=False):
 
 
 def _classify(state: RfpGraphState) -> dict[str, Any]:
+    if "accepted" in state:
+        return {}
     accepted, reason = classify_document(state["markdown"])
     return {"accepted": accepted, "reason": reason, "metrics": readability_metrics(state["markdown"])}
 
 
 def _extract(state: RfpGraphState) -> dict[str, Any]:
+    if "metadata" in state:
+        return {}
     metadata = extract_metadata(state["markdown"])
     metadata["readability_metrics"] = state["metrics"]
     return {"metadata": metadata}
@@ -100,13 +104,29 @@ def _build_graph():
 RFP_GRAPH = _build_graph()
 
 
-def process_rfp_markdown(markdown: str, markdown_path: str) -> dict[str, Any]:
+def process_rfp_markdown(
+    markdown: str,
+    markdown_path: str,
+    *,
+    accepted: bool | None = None,
+    reason: str | None = None,
+    metadata: dict[str, Any] | None = None,
+    metrics: dict[str, float | int | bool] | None = None,
+) -> dict[str, Any]:
     """Run the graph against an already converted and persisted Markdown document."""
-    result = RFP_GRAPH.invoke({
+    initial_state: RfpGraphState = {
         "markdown": markdown,
         "markdown_path": markdown_path,
         "department_sections": [],
-    })
+    }
+    if accepted is not None:
+        initial_state["accepted"] = accepted
+        initial_state["reason"] = reason or ""
+    if metadata is not None:
+        initial_state["metadata"] = metadata
+    if metrics is not None:
+        initial_state["metrics"] = metrics
+    result = RFP_GRAPH.invoke(initial_state)
     if not result["accepted"]:
         return {
             "accepted": False,

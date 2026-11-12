@@ -168,6 +168,7 @@ class RfpTicket(SQLModel, table=True):
     status: str = SQLField(default="analizando", max_length=32, index=True)
     classification_result: bool | None = None
     classification_reason: str | None = SQLField(default=None, sa_type=Text)
+    accepted_at: datetime | None = None
     processing_error: str | None = SQLField(default=None, sa_type=Text)
     synthesizer_payload: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
     # Parte 2: handoff de generación/evaluación hacia la Parte 3
