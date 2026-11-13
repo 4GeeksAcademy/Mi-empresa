@@ -88,6 +88,12 @@ export function Shell({ children }: { children: React.ReactNode }) {
               Base de conocimiento
             </Link>
             <Link
+              href="/chat"
+              className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
+            >
+              Chat CX
+            </Link>
+            <Link
               href="/rfps"
               className="rounded-md px-3 py-1.5 text-sm font-semibold text-slate-700 hover:bg-slate-100"
             >

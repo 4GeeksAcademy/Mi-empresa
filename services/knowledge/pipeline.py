@@ -1,7 +1,10 @@
 """Grounded retrieval and answer generation for TrackFlow sales questions."""
 
 import os
+from contextvars import ContextVar
 from collections.abc import Sequence
+from threading import Event
+from typing import Callable, Any
 
 from services.knowledge.indexing import COLLECTION, embed, required_setting
 
@@ -9,6 +12,23 @@ DEFAULT_MIN_SCORE = 0.35
 _REQUIRED_PAYLOAD_FIELDS = {
     "company", "source_document", "section", "language", "chunk_index", "text",
 }
+_generation_sink: ContextVar[
+    tuple[Callable[[str], None], Event, Callable[[Callable[[], None]], None]] | None
+] = ContextVar(
+    "trackflow_generation_sink", default=None,
+)
+
+
+def set_generation_sink(
+    on_token: Callable[[str], None], cancelled: Event,
+    register_abort: Callable[[Callable[[], None]], None],
+):
+    """Install a per-invocation token sink without changing graph state."""
+    return _generation_sink.set((on_token, cancelled, register_abort))
+
+
+def reset_generation_sink(token) -> None:
+    _generation_sink.reset(token)
 
 
 def retrieve(query: str, *, k: int = 5, min_score: float = DEFAULT_MIN_SCORE) -> list[dict]:
@@ -120,6 +140,7 @@ def generate_answer(question: str, context: Sequence[dict]) -> str:
     model, base_url, api_key = _generation_settings()
     client = OpenAI(base_url=base_url, api_key=api_key, timeout=30.0, max_retries=1)
     try:
+        sink = _generation_sink.get()
         response = client.chat.completions.create(
             model=model,
             messages=[
@@ -127,7 +148,28 @@ def generate_answer(question: str, context: Sequence[dict]) -> str:
                 {"role": "user", "content": user_prompt},
             ],
             temperature=0,
+            stream=sink is not None,
         )
+        if sink is not None:
+            on_token, cancelled, register_abort = sink
+            register_abort(response.close)
+            pieces: list[str] = []
+            try:
+                for part in response:
+                    if cancelled.is_set():
+                        break
+                    token = part.choices[0].delta.content
+                    if isinstance(token, str) and token:
+                        pieces.append(token)
+                        on_token(token)
+            finally:
+                response.close()
+            if cancelled.is_set():
+                raise InterruptedError("Chat generation was interrupted.")
+            answer = "".join(pieces)
+            if not answer.strip():
+                raise RuntimeError("El modelo de generación devolvió una respuesta vacía.")
+            return answer.strip()
     finally:
         client.close()
     answer = response.choices[0].message.content

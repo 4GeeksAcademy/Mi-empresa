@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -10,6 +11,7 @@ from typing import Literal
 from uuid import UUID, uuid4
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
+from fastapi import WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from fastapi.exceptions import RequestValidationError
@@ -19,7 +21,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 import re
 from telemetry import TelemetryMiddleware, context, emit, normalized_route
 
-from auth import get_current_user
+from auth import authenticate_access_token, get_current_user
 from database import init_inventory_db
 from kombu.exceptions import OperationalError
 from redis.exceptions import RedisError
@@ -39,6 +41,7 @@ from routes.rfp import router as rfp_router
 from services.support_agent.graph import open_agent_graph
 from services.support_agent.memory import AgentMemoryStore
 from services.support_agent.traces import AgentTraceStore, agent_data_directory
+from services.support_agent.chat import ChatHub, resolve_client_id
 from services.reporting.routes import router as reporting_router
 from pydantic import BaseModel, ConfigDict
 
@@ -61,9 +64,12 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.agent_graph = graph
         app.state.agent_traces = traces
         app.state.agent_memory = memory
+        app.state.chat_hub = ChatHub(data_directory / "agent.sqlite3")
         try:
             yield
         finally:
+            app.state.chat_hub.close()
+            app.state.chat_hub = None
             app.state.agent_graph = None
             app.state.agent_traces = None
             app.state.agent_memory = None
@@ -157,6 +163,84 @@ app.include_router(knowledge_router)
 app.include_router(agent_router)
 app.include_router(reporting_router)
 app.include_router(rfp_router)
+
+
+@app.websocket("/agent/chat/{session_id}")
+async def agent_chat(websocket: WebSocket, session_id: str, token: str | None = None):
+    # Authenticate before accept and before reading any chat frame.
+    try:
+        parsed_session = str(UUID(session_id))
+    except ValueError:
+        await websocket.close(code=1008, reason="invalid session_id")
+        return
+    if not token:
+        await websocket.close(code=1008, reason="authentication required")
+        return
+    try:
+        user = authenticate_access_token(token)
+    except HTTPException:
+        await websocket.close(code=1008, reason="invalid authentication")
+        return
+
+    hub = getattr(websocket.app.state, "chat_hub", None)
+    graph = getattr(websocket.app.state, "agent_graph", None)
+    traces = getattr(websocket.app.state, "agent_traces", None)
+    memory = getattr(websocket.app.state, "agent_memory", None)
+    if hub is None or graph is None or traces is None or memory is None:
+        await websocket.close(code=1013, reason="chat service unavailable")
+        return
+    try:
+        session = hub.get_or_create(parsed_session, str(user["id"]), resolve_client_id(user))
+    except PermissionError:
+        await websocket.close(code=1008, reason="session access denied")
+        return
+
+    await websocket.accept()
+    queue = hub.subscribe(parsed_session)
+    await websocket.send_json(hub.snapshot(session))
+    generation_lock = hub.turn_lock(parsed_session)
+
+    async def forward_events() -> None:
+        while True:
+            event = await queue.get()
+            await websocket.send_json(event)
+
+    forwarder = asyncio.create_task(forward_events())
+    try:
+        while True:
+            frame = await websocket.receive_json()
+            if not isinstance(frame, dict):
+                continue
+            event = frame.get("event")
+            data = frame.get("data")
+            if not isinstance(data, dict) or data.get("session_id") != parsed_session:
+                continue
+            if event == "user_message":
+                text = data.get("text")
+                if not isinstance(text, str) or not text.strip() or len(text) > 2000:
+                    continue
+                text = text.strip()
+                async with generation_lock:
+                    with hub._lock:
+                        generating = session.cancelled is not None and not session.cancelled.is_set()
+                    if generating:
+                        hub.interrupt(session, text)
+                        await hub.wait_for_interruption(session)
+                    hub.add_user_message(session, text)
+                    hub.start_turn(session, text, graph, traces, memory)
+            elif event == "interrupt_requested":
+                new_input = data.get("new_input")
+                if isinstance(new_input, str) and new_input.strip() and len(new_input) <= 2000:
+                    async with generation_lock:
+                        hub.interrupt(session, new_input.strip())
+                        await hub.wait_for_interruption(session)
+                        hub.add_user_message(session, new_input.strip())
+                        hub.start_turn(session, new_input.strip(), graph, traces, memory)
+    except WebSocketDisconnect:
+        pass
+    finally:
+        forwarder.cancel()
+        hub.unsubscribe(parsed_session, queue)
 
 class HealthResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")

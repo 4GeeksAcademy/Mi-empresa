@@ -1,5 +1,38 @@
 # Progress Log
 
+## 2026-11-13 (Hito WebSocket de chat First-line CX)
+
+- Integrado el canal WebSocket `/agent/chat/{session_id}` sobre el agente
+	`first_line_cx` existente. Reutiliza el JWT actual y asocia la sesión a
+	`user_id`/`client_id`; `session_id` también es `thread_id` de LangGraph.
+- `ChatHub` persiste historial y metadatos en SQLite, publica eventos por canal
+	de sesión y rehidrata snapshots. Los chunks tienen `sequence`, `message_id` y
+	`generation_id` para proteger clientes contra generaciones antiguas. La UI
+	`/chat` reintenta con backoff y permite interrumpir/redirigir manteniendo el
+	texto parcial.
+- El proveedor OpenAI-compatible corre en streaming. El sink `ContextVar` es
+	por generación, `threading.Event` detiene el consumo y `response.close()`
+	aborta el stream; el productor terminado se espera antes de reutilizar el
+	mismo thread LangGraph. Manejo de error finaliza mensajes que de otro modo
+	quedarían en `streaming`.
+- Pruebas API cubren rechazo sin JWT, handshake autenticado, chunks/orden,
+	snapshot tras reconexión, aborto real del proveedor simulado, rechazo de
+	chunks tardíos y nuevo turno. Jest cubre streaming y redirección.
+- `services/api/tests/test_chat.py`: **3 passed** (1 warning externo de
+	deprecación Starlette/AnyIO). Diagnósticos de editor para archivos afectados:
+	sin errores. No equivale a suite API completa ni a prueba con proveedor live.
+- Backoffice: `npm run lint` PASS, Jest focalizado de `/chat` **1 passed** y
+	`npm run build` PASS (incluye TypeScript y generación estática de `/chat`).
+	`git diff --check` PASS tras la revisión final.
+- ChatHub/pub-sub permanece single-process como permite el briefing; antes de
+	varias réplicas se requiere backplane. En producción se debe configurar
+	`NEXT_PUBLIC_AGENT_WS_URL` con `wss://` y redactar `token` de query string en
+	logs de proxy/API.
+- Documentados el endpoint, configuración y riesgos en los README del API y
+	backoffice y en `docs/websocket-chat-design.md`. No se modificó infraestructura,
+	workflows, secretos ni archivos de entorno. Sin commit, push ni merge; cambios
+	preexistentes ajenos permanecen intactos.
+
 ## 2026-11-12 (SSE: notificaciones de llegada RFP)
 
 - Se extiende la API RFP existente con `GET /api/rfps/events`, autenticado por
