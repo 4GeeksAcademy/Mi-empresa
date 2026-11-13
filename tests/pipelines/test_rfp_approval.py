@@ -24,6 +24,7 @@ from data.pipelines.rfp_intake.approval import (
     TRIGGER_RETURNS_SLA_BREACH,
     TRIGGER_VOLUME_VS_CAPACITY,
     DecisionValidationError,
+    apply_arbiter_rules,
     department_thread_id,
     detect_conflicts,
     open_approval_env,
@@ -34,6 +35,7 @@ from data.pipelines.rfp_intake.response import (
     STATUS_EN_EVALUACION,
     STATUS_NEEDS_HUMAN_REVIEW,
     build_part3_handoff,
+    evaluate_compliance,
     run_response_generation,
 )
 from services.rfp_graph import process_rfp_markdown
@@ -300,6 +302,7 @@ def test_arbitration_resolves_structured_currency_conflict(tmp_path):
                    if s["department_id"] == "reverse")
     reverse["draft_content"] = (
         "## Reverse Logistics — ModaViva\nTodo se factura en USD.")
+    reverse["currency"] = "USD"
     reverse["evaluation_results"] = evaluate_draft(reverse["draft_content"], {})
 
     conflicts = detect_conflicts(part3)
@@ -331,6 +334,101 @@ def test_arbitration_resolves_structured_currency_conflict(tmp_path):
         assert session.is_complete(TICKET) is True
 
 
+
+@pytest.mark.parametrize(
+    ("draft", "expected_currency", "has_conflict"),
+    [
+        ("Precio: $25", "USD", True),
+        ("Precio: US$25", "USD", True),
+        ("Precio: 25 dólares", "USD", True),
+        ("Precio: 25 dollars", "USD", True),
+        ("Precio: USD 25", "USD", True),
+        ("Precio: €25", "EUR", False),
+        ("Precio: 25 euros", "EUR", False),
+        ("Precio: 25 EUR", "EUR", False),
+        ("Precio: $25 y €20", "MIXED", True),
+    ],
+)
+def test_part3_handoff_types_currency_markers(draft, expected_currency,
+                                              has_conflict):
+    section = {
+        "department_id": "reverse",
+        "section_id": "currency-test",
+        "approver": "Sofía Ramos",
+        "draft_content": draft,
+        "evaluation_results": {},
+        "approval_status": "pendiente",
+        "needs_human_review": False,
+        "iteration_count": 1,
+        "open_questions": [],
+    }
+    handoff = build_part3_handoff(
+        {"ticket_id": "currency-test",
+         "metadata": {"client_country": "Spain"}},
+        [section], "esperando_aprobación")
+
+    typed_section = handoff["sections"][0]
+    assert typed_section["currency"] == expected_currency
+    conflicts = detect_conflicts(handoff)
+    assert any(c["trigger"] == TRIGGER_CURRENCY_MISMATCH
+               for c in conflicts) is has_conflict
+
+
+def test_returns_sla_only_flags_and_rewrites_returns_promises():
+    delivery = "Lastmile: entrega en 24 horas."
+    returns = "Reverse: devoluciones en 24 horas."
+
+    delivery_evaluation = evaluate_compliance(
+        delivery, {"client_country": "Spain", "department_id": "lastmile"})
+    returns_evaluation = evaluate_compliance(
+        returns, {"client_country": "Spain", "department_id": "reverse"})
+    assert "returns-window-48h" not in delivery_evaluation["rule_ids"]
+    assert "returns-window-48h" in returns_evaluation["rule_ids"]
+    stale_violation = {
+        "metadata": {"client_country": "Spain"},
+        "sections": [{
+            "department_id": "lastmile",
+            "draft_content": delivery,
+            "evaluation_results": {"compliance": {"violations": [
+                {"rule_id": "returns-window-48h"}] }},
+        }],
+    }
+    assert not any(c["trigger"] == TRIGGER_RETURNS_SLA_BREACH
+                   for c in detect_conflicts(stale_violation))
+
+    instruction = {"action": "forbid_returns_under_48h"}
+    assert apply_arbiter_rules(delivery, instruction, {}) == delivery
+    rewritten_returns = apply_arbiter_rules(returns, instruction, {})
+    assert "48 horas" in rewritten_returns
+    assert "24 horas" not in rewritten_returns
+
+
+@pytest.mark.parametrize("draft", [
+    "Returns in 47 hours.", "Returns up to 1.5 days.",
+    "Returns in less than 2 days.", "Returns: <48 h.",
+])
+def test_arbiter_rewrites_every_supported_breach_span(draft):
+    rewritten = apply_arbiter_rules(
+        draft, {"action": "forbid_returns_under_48h"}, {})
+    assert "48 horas" in rewritten
+    assert "47 hours" not in rewritten
+    assert "1.5 days" not in rewritten
+    assert "less than 2 days" not in rewritten
+    assert "<48 h" not in rewritten
+
+
+def test_arbiter_rewrite_preserves_delivery_sla_and_nonbreach_returns():
+    draft = (
+        "Delivery in 24 h. Returns not under 24 hours. "
+        "Returns in 49 hours. Returns in 24 hours."
+    )
+    rewritten = apply_arbiter_rules(
+        draft, {"action": "forbid_returns_under_48h"}, {})
+    assert "Delivery in 24 h" in rewritten
+    assert "Returns not under 24 hours" in rewritten
+    assert "Returns in 49 hours" in rewritten
+    assert rewritten.count("48 horas") == 1
+
 def test_detect_conflicts_covers_returns_and_volume_triggers():
     handoff = {
         "metadata": {"client_country": "Spain", "monthly_volume": 1200},
@@ -346,6 +444,7 @@ def test_detect_conflicts_covers_returns_and_volume_triggers():
             },
             {
                 "department_id": "reverse",
+                "draft_content": "Devoluciones en 24 horas.",
                 "evaluation_results": {
                     "compliance": {
                         "violations": [{"rule_id": "returns-window-48h"}],
