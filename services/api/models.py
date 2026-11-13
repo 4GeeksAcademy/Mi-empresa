@@ -151,3 +151,55 @@ class TelemetryEventRecord(SQLModel, table=True):
             server_default=text("'{}'"),
         ),
     )
+
+
+class RfpTicket(SQLModel, table=True):
+    """Durable lifecycle record for an uploaded TrackFlow RFP."""
+
+    __tablename__ = "rfp_tickets"
+    __table_args__ = (Index("ix_rfp_tickets_owner_created", "owner_id", "created_at"),)
+
+    ticket_id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), primary_key=True))
+    rfp_id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), unique=True, nullable=False))
+    owner_id: str = SQLField(max_length=64)
+    original_filename: str = SQLField(max_length=255)
+    raw_pdf_path: str = SQLField(sa_type=Text)
+    markdown_path: str | None = SQLField(default=None, sa_type=Text)
+    status: str = SQLField(default="analizando", max_length=32, index=True)
+    classification_result: bool | None = None
+    classification_reason: str | None = SQLField(default=None, sa_type=Text)
+    processing_error: str | None = SQLField(default=None, sa_type=Text)
+    synthesizer_payload: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    created_at: datetime = SQLField(default_factory=utc_now)
+    updated_at: datetime = SQLField(default_factory=utc_now)
+
+
+class RfpMetadataRecord(SQLModel, table=True):
+    __tablename__ = "rfp_metadata"
+
+    ticket_id: UUID = SQLField(foreign_key="rfp_tickets.ticket_id", primary_key=True)
+    client_name: str | None = SQLField(default=None, max_length=255)
+    client_country: str | None = SQLField(default=None, max_length=80)
+    services_requested: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    unknown_services: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    monthly_volume: int | None = None
+    monthly_volume_unit: str | None = SQLField(default=None, max_length=80)
+    deadline: str | None = SQLField(default=None, max_length=120)
+    budget_range: str | None = SQLField(default=None, max_length=255)
+    departments_needed: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    currency: str | None = SQLField(default=None, max_length=3)
+    readability_metrics: dict = SQLField(default_factory=dict, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+
+
+class DepartmentSectionRecord(SQLModel, table=True):
+    __tablename__ = "rfp_department_sections"
+    __table_args__ = (UniqueConstraint("ticket_id", "department_id", name="uq_rfp_ticket_department"),)
+
+    id: int | None = SQLField(default=None, primary_key=True)
+    ticket_id: UUID = SQLField(foreign_key="rfp_tickets.ticket_id", index=True)
+    department_id: str = SQLField(max_length=32)
+    key_aspects: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    open_questions: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
+    source_extract: str = SQLField(default="", sa_type=Text)
+    approver: str = SQLField(max_length=120)
+    created_at: datetime = SQLField(default_factory=utc_now)

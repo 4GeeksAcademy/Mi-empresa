@@ -16,7 +16,7 @@ services:
     volumes:
       - ./uis:/app
       - ./src:/src:ro
-      - ./docs/telemetry:/docs/telemetry:ro
+      - ./docs/telemetry:/app/docs/telemetry:ro
       - website_node_modules:/app/website/node_modules
       - backoffice_node_modules:/app/backoffice/node_modules
     networks:
@@ -45,6 +45,7 @@ services:
       - ./packages:/app/packages:ro
       - ./docs/telemetry:/docs/telemetry:ro
       - task_data:/var/lib/trackflow/tasks
+      - ./data/raw:/app/data/raw
     networks:
       - trackflow-dev
     depends_on:
@@ -99,6 +100,7 @@ services:
       - ./services:/app/services
       - ./packages:/app/packages:ro
       - task_data:/var/lib/trackflow/tasks
+      - ./data/raw:/app/data/raw
     networks:
       - trackflow-dev
     depends_on:
