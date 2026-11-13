@@ -125,6 +125,65 @@ def test_compliance_fails_when_draft_promises_returns_under_48h():
     assert any("48" in v["message"] for v in result["violations"])
 
 
+def test_compliance_requires_contractual_sla_not_discount_percentage():
+    draft = (
+        "### Costes\nEl cliente recibe un descuento del 10%. "
+        "Todo se factura en EUR.\n\n"
+        "### Descuentos por volumen\n| Volumen | Descuento |\n"
+        "| --- | --- |\n| Alto | 10% |\n"
+    )
+    result = evaluate_compliance(draft, {"client_country": "Spain"})
+
+    assert "on-time-sla-required" in result["rule_ids"]
+
+
+def test_compliance_accepts_contractual_90_percent_on_time_sla():
+    draft = (
+        "### Costes\nEl SLA de entregas a tiempo es del 90% cada mes. "
+        "Todo se factura en EUR.\n\n"
+        "### Descuentos por volumen\n| Volumen | Descuento |\n"
+        "| --- | --- |\n| Alto | 10% |\n"
+    )
+    result = evaluate_compliance(draft, {"client_country": "Spain"})
+
+    assert "on-time-sla-required" not in result["rule_ids"]
+
+
+def test_compliance_detects_carrier_rates_case_insensitively():
+    draft = (
+        "### Costes\nEl SLA de entregas a tiempo es del 90% cada mes. "
+        "La tarifa de MRW es confidencial. Todo se factura en EUR.\n\n"
+        "### Descuentos por volumen\n| Volumen | Descuento |\n"
+        "| --- | --- |\n| Alto | 10% |\n"
+    )
+    result = evaluate_compliance(draft, {"client_country": "Spain"})
+
+    assert "carrier-rates-confidential" in result["rule_ids"]
+
+
+def test_relevance_requires_key_aspect_exact_text():
+    from data.pipelines.rfp_intake.response import evaluate_relevance
+
+    result = evaluate_relevance(
+        "We provide WAREHOUSING for our apparel SKUs.",
+        {"key_aspects": ["warehousing for our apparel SKUs"]},
+    )
+
+    assert result["pass"] is False
+    assert result["missing_aspects"] == ["warehousing for our apparel SKUs"]
+
+
+def test_48_hour_return_rule_applies_in_lastmile_sections():
+    draft = (
+        "## Last Mile\nReturns are processed in 24 hours.\n"
+        "The SLA of on-time deliveries is 90% monthly.\n\n"
+        "### Volume discount table\n| Volume | Discount |\n| --- | --- |\n| High | 10% |\n"
+    )
+    result = evaluate_compliance(draft, {"department_id": "lastmile"})
+
+    assert "returns-window-48h" in result["rule_ids"]
+
+
 def test_compliance_fails_on_currency_mismatch_with_client_country():
     draft = (
         "### Costes\nTodo se factura en USD con un SLA de entregas a tiempo del "

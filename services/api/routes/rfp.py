@@ -264,6 +264,15 @@ def start_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current
     try:
         enqueue_response(str(ticket_id))
     except Exception as exc:
+        # Do not strand the ticket in a state that implies a worker owns it.
+        # The caller can safely retry from the original eligible state.
+        with Session(get_engine()) as session:
+            ticket = session.get(RfpTicket, ticket_id)
+            if ticket:
+                ticket.status = "analisis_completo"
+                ticket.updated_at = datetime.now(timezone.utc)
+                session.add(ticket)
+                session.commit()
         raise HTTPException(status_code=503, detail={"ticket_id": str(ticket_id),
                                                     "message": "No se pudo confirmar el encolado."}) from exc
     return {"ticket_id": str(ticket_id), "status": "generando_borrador"}

@@ -287,6 +287,33 @@ def test_response_endpoints_enqueue_and_persist_handoff(rfp_client, monkeypatch)
         assert ticket.status == "generando_borrador"
 
 
+def test_response_enqueue_failure_restores_retryable_ticket_state(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _tid: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf",
+                                                        "application/pdf")}).json()
+    ticket_id = created["ticket_id"]
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        ticket.status = "analisis_completo"
+        ticket.synthesizer_payload = {"handoff": {"ticket_id": ticket_id}}
+        session.add(ticket)
+        session.commit()
+
+    def fail_enqueue(_ticket_id):
+        raise RuntimeError("broker unavailable")
+
+    monkeypatch.setattr(rfp_route, "enqueue_response", fail_enqueue)
+    response = client.post(f"/api/rfps/{ticket_id}/response")
+
+    assert response.status_code == 503
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        assert ticket.status == "analisis_completo"
+
+
 def test_get_response_returns_persisted_sections_and_handoff(rfp_client, monkeypatch):
     client, engine, _ = rfp_client
     import routes.rfp as rfp_route
