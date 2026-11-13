@@ -52,6 +52,24 @@ autorizado debe sincronizarlo antes de instalar esta API con `--locked`.
   - Response: propuestas, decisiones y eventos auditables del propietario.
 - `POST /agent/memory/consolidate`
   - Response: cantidad eliminada por la politica de expiracion/consolidacion.
+- `WS /agent/chat/{session_id}?token=<JWT>`
+  - Autentica el mismo access token JWT del backoffice antes de aceptar el socket.
+    El cliente debe usar `wss://` en despliegues HTTPS y proteger/redactar el query
+    `token` en logs del proxy y del servidor.
+  - Primer evento servidor: `session_snapshot` con historial, estado y metadatos
+    de la sesión. El cliente envía `user_message` y, para redirigir durante la
+    respuesta, `interrupt_requested`; el servidor publica `token_chunk`,
+    `generation_interrupted` y `generation_completed`.
+  - `session_id` es también el `thread_id` LangGraph. Las sesiones se guardan en
+    `agent.sqlite3`; pub/sub y productores se mantienen en memoria, por lo que
+    esta implementación requiere una sola réplica/proceso API. Varias réplicas
+    necesitan un backplane compartido antes de desplegar.
+
+La interfaz `/chat` del backoffice configura el origen WebSocket mediante
+`NEXT_PUBLIC_AGENT_WS_URL` (por ejemplo `wss://api.example.com` en producción;
+por defecto `ws://localhost:8000`). Requiere que el usuario haya iniciado sesión.
+Prueba focalizada del contrato y reconexión: `python -m pytest
+services/api/tests/test_chat.py -q` desde la raíz usando el entorno de API.
 
 Para consultar un trace usando un `trace_id` de la respuesta autenticada:
 

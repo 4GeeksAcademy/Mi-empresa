@@ -38,9 +38,10 @@ def execute_agent(
     owner_id: str,
     question: str,
     memory: AgentMemoryStore | None = None,
+    thread_id: str | None = None,
 ) -> AgentExecution:
     trace_id = str(uuid4())
-    config = {"configurable": {"thread_id": trace_id}}
+    config = {"configurable": {"thread_id": thread_id or trace_id}}
     resolution = (
         memory.resolve_pending(owner_id, question)
         if memory is not None

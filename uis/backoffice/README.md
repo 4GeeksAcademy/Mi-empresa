@@ -69,3 +69,21 @@ Consultar [cobertura y limitaciones](../../docs/telemetry/implementation.md).
 - Acceso para perfiles manager/admin. El período elegido en la UI incluye ambas fechas; el proxy conserva los filtros de fecha y país.
 - La página presenta los cinco KPI diarios de TrackFlow y muestra explícitamente cuando no hay filas publicadas, sin sintetizar valores.
 - La frescura se calcula desde la última actualización recibida; más de diez minutos se marca como desactualizada. Es una señal visual basada en el umbral propuesto, no un SLA aprobado.
+
+## Chat First-line CX en tiempo real
+
+- Ruta UI: `/chat`; usa el agente `first_line_cx` existente, sin duplicar la
+	lógica LangGraph/RAG.
+- Configura `NEXT_PUBLIC_AGENT_WS_URL` con el origen WebSocket del API. En
+	producción HTTPS usa `wss://`; el valor por defecto `ws://localhost:8000` es
+	solo para desarrollo local.
+- La página envía el JWT de sesión en el handshake y conserva el `session_id`
+	en localStorage para rehidratar el historial. Durante la generación, un nuevo
+	mensaje redirige/interrumpe el stream; los chunks parciales y el estado
+	interrumpido se conservan.
+- El API persiste la sesión en SQLite, pero el pub/sub actual es single-process;
+	una instalación con varias réplicas necesita un backplane compartido.
+- Pruebas: `npm test -- --runInBand --runTestsByPath tests/chat-page.test.tsx`;
+	backend: `python -m pytest services/api/tests/test_chat.py -q` desde la raíz.
+- El JWT viaja en query string por compatibilidad con WebSocket del navegador;
+	configura redacción del parámetro `token` en logs de proxy/API.
