@@ -14,6 +14,11 @@ from services.support_agent.memory import (
     propose_memory,
 )
 from services.support_agent.traces import AgentTraceStore
+from services.support_agent.guardrails import (
+    classify_input,
+    is_memory_command,
+    validate_output,
+)
 
 logger = logging.getLogger("trackflow_api.support_agent")
 
@@ -41,15 +46,32 @@ def execute_agent(
 ) -> AgentExecution:
     trace_id = str(uuid4())
     config = {"configurable": {"thread_id": trace_id}}
+    memory_command = is_memory_command(question)
+    decision = classify_input(question, allow_memory_command=memory_command)
+    if decision["action"] != "allow":
+        traces.create(trace_id, owner_id, question)
+        traces.finish(trace_id, status="rejected", answer=decision["answer"])
+        return AgentExecution(trace_id, decision["answer"] or "", None)
     resolution = (
-        memory.resolve_pending(owner_id, question)
+        MemoryResolution("none", "")
+        if not question.strip()
+        else memory.resolve_pending(owner_id, question)
         if memory is not None
-        else MemoryResolution("none", question.strip() or None)
+        else MemoryResolution("none", question.strip())
     )
     graph_question = resolution.question
     proposal = resolution.proposal
+    if memory_command and resolution.action == "none":
+        answer = "No hay ninguna propuesta de memoria pendiente."
+        if question.strip().lower() == "rechazar":
+            answer = "Entendido; no hay ninguna propuesta pendiente y no cambia la memoria."
+        _, answer = validate_output(answer, country=decision["country"])
+        traces.create(trace_id, owner_id, question)
+        traces.finish(trace_id, status="completed", answer=answer)
+        return AgentExecution(trace_id, answer, None)
     if graph_question is None:
         answer = _memory_decision_answer(resolution)
+        _, answer = validate_output(answer, country=decision["country"])
         traces.create(trace_id, owner_id, question)
         traces.finish(trace_id, status="completed", answer=answer)
         return AgentExecution(trace_id, answer, None, proposal)
@@ -60,6 +82,7 @@ def execute_agent(
         else []
     )
     agent_input: AgentInput = {"question": graph_question}
+    agent_input["country"] = decision["country"]
     if memory_context:
         agent_input["memory_context"] = memory_context
     traces.create(trace_id, owner_id, question)
@@ -114,6 +137,11 @@ def execute_agent(
                 "\n\nNo he creado otra propuesta de memoria porque ya existe una "
                 "pendiente de decisión. Resuélvela antes de proponer otra."
             )
+        valid, safe_answer = validate_output(answer, country=decision["country"])
+        if not valid:
+            traces.finish(trace_id, status="rejected", answer=safe_answer)
+            return AgentExecution(trace_id, answer=safe_answer, error=None)
+        answer = safe_answer
         traces.finish(trace_id, status="completed", answer=answer)
         return AgentExecution(
             trace_id, answer=answer, error=None, propuesta_memoria=proposal,

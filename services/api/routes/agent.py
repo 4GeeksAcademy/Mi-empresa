@@ -12,6 +12,7 @@ from services.support_agent.execution import AgentExecutionError, execute_agent
 from services.support_agent.graph import CompiledStateGraph
 from services.support_agent.memory import AgentMemoryStore
 from services.support_agent.traces import AgentTraceStore
+from services.support_agent.guardrails import guardrail_summary
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -148,3 +149,11 @@ def consolidate_agent_memory(
 ) -> dict[str, int]:
     memory = _agent_memory(http_request)
     return memory.consolidate()
+
+
+@router.get("/guardrails/summary")
+def get_guardrail_summary(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Return process-local activation counts for the current QA/runtime session."""
+    return {"scope": "process_session", "activations": guardrail_summary()}

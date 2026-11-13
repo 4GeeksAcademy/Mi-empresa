@@ -1,5 +1,16 @@
 # Progress Log
 
+## 2026-11-03 (Hito 8 Parte 2: harness y guardrails de agente)
+
+- Rama de trabajo: `feature/agent-guardrails`. Se protege el agente CX LangGraph existente; no se crea un agente paralelo.
+- Añadido `services/support_agent/guardrails.py`: clasificación determinista antes de memoria/RAG/MCP, patrones de jailbreak, rechazo de tareas personales, redirección de small talk/logística general, bloqueo fail-closed de referencias a pedidos sin autorización, validación del output y contadores/logs sin texto del usuario. La normalización cubre acentos del español.
+- El contenido RAG y recuerdos aprobados se serializan como JSON en un campo de datos explícitamente no confiable como instrucción. Se endurece el system prompt de CX en español/inglés, con dominio, políticas país, confidencialidad y fallback por falta de evidencia. Errores estructurales del MCP cuentan como guardrail `structural`.
+- El endpoint autenticado `GET /agent/guardrails/summary` expone conteos process-local de activaciones. Añadidas pruebas deterministas para variantes de jailbreak, ensayo personal requerido, ID de pedido bloqueado antes del grafo, override de país, redirecciones, fixture de inyección RAG, outputs sensibles/malformados, consentimiento de memoria de Hito 8 Parte 1 y endpoint autenticado. Se actualizaron expectativas antiguas de prompt RAG.
+- Limitación de seguridad deliberada: la integración actual de MCP resuelve incidencias, no envíos, y no hay resolver de propietario/pedido ni país fiable ligado a sesión. Por ello, toda referencia de pedido/tracking falla cerrada; no se afirma autorización ni seguimiento legítimo funcional. Override de políticas de país se rechaza ante ausencia de metadata confiable; texto de país indicado por usuario no se eleva a contexto fiable. Las reglas por patrones y el scanner de outputs no garantizan detectar toda inyección semántica; RAG JSON y system prompt son capas complementarias, no sandbox de LLM. Los contadores en memoria no son auditoría durable ni métricas agregadas entre workers.
+- Validación local: `python -m compileall` sobre módulos/tests modificados y `git diff --check` PASS. Pylance/get_errors sin errores en los archivos nuevos/modificados.
+- Validación final: `uv lock --project services/api --check` PASS; suite focalizada del agente, RAG, herramientas y API: **66 passed, 1 warning**. El `services/api/uv.lock` se reparó y sincronizó con las dependencias declaradas. El warning es una deprecación externa de Starlette/AnyIO.
+- Se preservan fuera del alcance los cambios preexistentes del usuario (`company-BRIEFING.md` eliminado y `memory-BRIEFING.md`, `securing-of-agents-BRIEFING.md` sin seguimiento); no se incluyen en este hito.
+
 ## 2026-11-02 (publicacion del hito de memoria)
 
 - Usuario autoriza commit, push y PR en Hugo-VC/Mi-empresa, limitado a la tarea de memoria. Alcance: agente, integracion API, pruebas de memoria, READMEs, briefing y progreso. Excluidos cambios locales de ambos uv.lock y services/data/incidents.json; no se accede a archivos restringidos.
