@@ -3,6 +3,7 @@ compliance failure anchored to a real rule of the TrackFlow BRIEFING §5."""
 from __future__ import annotations
 
 import data.pipelines.rfp_intake.response as response_module
+import pytest
 from data.pipelines.rfp_intake.response import (
     build_generation_context,
     evaluate_compliance,
@@ -194,6 +195,46 @@ def test_compliance_fails_on_currency_mismatch_with_client_country():
 
     assert result["pass"] is False
     assert "currency-by-country" in result["rule_ids"]
+
+
+@pytest.mark.parametrize("marker", ["$", "US$", "USD", "dólar", "dólares", "dollar", "dollars"])
+def test_compliance_detects_usd_currency_markers_for_spain(marker):
+    result = evaluate_compliance(
+        f"### Costes\nTarifa: {marker} 25.\n### Descuentos por volumen\n|x|y|\n|---|---|\n|x|y|",
+        {"client_country": "Spain"},
+    )
+    assert "currency-by-country" in result["rule_ids"]
+
+
+@pytest.mark.parametrize("marker", ["€", "EUR", "euro", "euros"])
+def test_compliance_accepts_eur_currency_markers_for_spain(marker):
+    result = evaluate_compliance(
+        f"### Costes\nTarifa: {marker} 25.\n### Descuentos por volumen\n|x|y|\n|---|---|\n|x|y|",
+        {"client_country": "Spain"},
+    )
+    assert "currency-by-country" not in result["rule_ids"]
+
+
+@pytest.mark.parametrize("phrase", [
+    "devoluciones en 47 horas", "returns within 47 h",
+    "returns up to 1.5 days", "returns in 0.5 days",
+    "returns in less than 2 days", "returns: <48 h",
+    "returns in 30 minutes", "returns in 3600 seconds",
+])
+def test_returns_sla_detects_supported_sub_48_hour_commitments(phrase):
+    result = evaluate_compliance(phrase, {"client_country": "Spain"})
+    assert "returns-window-48h" in result["rule_ids"]
+
+
+@pytest.mark.parametrize("phrase", [
+    "devoluciones en 48 horas", "returns in 49 hours",
+    "returns take 24-72 hours", "returns not under 24 hours",
+    "returns not less than 24 hours", "no prometemos devoluciones en 24 horas",
+    "delivery in 24 hours", "last-mile delivery in 24 h",
+])
+def test_returns_sla_ignores_nonbreaches_and_delivery_only(phrase):
+    result = evaluate_compliance(phrase, {"client_country": "Spain"})
+    assert "returns-window-48h" not in result["rule_ids"]
 
 
 # --- Ciclo generador-evaluador -------------------------------------------

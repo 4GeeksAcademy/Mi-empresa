@@ -69,6 +69,9 @@ from langchain_core.runnables import RunnableConfig
 from .response import (
     DEPARTMENTS,
     _utc_now,
+    _section_currency,
+    _returns_sla_breaches,
+    _normalize_currency_markers,
     build_generation_context,
     default_max_iterations,
     evaluate_section,
@@ -213,17 +216,20 @@ def detect_conflicts(handoff: dict[str, Any],
 
     # currency-mismatch: moneda ≠ mapeo del país, o dos secciones cotizando
     # en monedas distintas.
-    found: dict[str, set[str]] = {}
+    found: dict[str, str] = {}
     mismatched: set[str] = set()
     for section in sections:
-        text = section.get("draft_content") or ""
-        codes = {c for c in ("USD", "EUR") if re.search(rf"\b{c}\b", text)}
-        if not codes:
+        currency = (section.get("currency")
+                    or _section_currency(section.get("draft_content") or "")
+                    or expected_currency(metadata.get("client_country"))
+                    or metadata.get("currency"))
+        currency = str(currency).upper() if currency is not None else None
+        if currency not in {"USD", "EUR", "MIXED"}:
             continue
-        found[section["department_id"]] = codes
-        if expected and codes != {expected}:
+        found[section["department_id"]] = currency
+        if currency == "MIXED" or (expected and currency != expected):
             mismatched.add(section["department_id"])
-    currencies = set().union(*found.values()) if found else set()
+    currencies = set(found.values())
     if mismatched or len(currencies) > 1:
         conflicts.append({
             "trigger": TRIGGER_CURRENCY_MISMATCH,
@@ -231,12 +237,17 @@ def detect_conflicts(handoff: dict[str, Any],
             "detail": {"expected": expected, "found": sorted(currencies)},
         })
 
-    # returns-sla-breach: violación §5 ya detectada en la evaluación tipada
-    # (o señal explícita ``return_sla_breach``).
+    # La violación tipada se valida contra el borrador real con el mismo parser
+    # usado por compliance; evita atribuir plazos de entrega a devoluciones.
+    def _has_return_breach(section: dict[str, Any]) -> bool:
+        if section.get("return_sla_breach") is True:
+            return True
+        if RETURNS_RULE not in _violation_flags(section):
+            return False
+        return bool(_returns_sla_breaches(section.get("draft_content") or ""))
+
     offenders = sorted({
-        s["department_id"] for s in sections
-        if RETURNS_RULE in _violation_flags(s)
-        or s.get("return_sla_breach") is True
+        s["department_id"] for s in sections if _has_return_breach(s)
     })
     if offenders:
         # Si la sección ofensora es 'reverse', su guardrail automático ya
@@ -280,9 +291,9 @@ def apply_arbiter_rules(draft: str, instruction: dict[str, Any],
     action = instruction.get("action")
     if action == "rewrite_currency":
         expected = (expected_currency(metadata.get("client_country"))
-                    or metadata.get("currency"))
+                    or str(metadata.get("currency") or "").upper())
         if expected in ("EUR", "USD"):
-            draft = re.sub(r"\b(EUR|USD)\b", expected, draft)
+            draft = _normalize_currency_markers(draft, expected)
     elif action == "cap_volume":
         # §7: limitar el volumen de la propuesta a la capacidad de warehouse.
         draft = re.sub(
@@ -291,11 +302,9 @@ def apply_arbiter_rules(draft: str, instruction: dict[str, Any],
             "warehouse confirmada en onboarding.",
             draft, count=1)
     elif action == "forbid_returns_under_48h":
-        def _floor(match: re.Match) -> str:
-            hours = int(match.group(1))
-            return "48 horas" if hours < 48 else match.group(0)
-        draft = re.sub(r"\b(\d{1,3})\s*(?:h|hr|hrs|horas|hours)\b",
-                       _floor, draft, flags=re.IGNORECASE)
+        for start, end, _hours, replacement in reversed(
+                _returns_sla_breaches(draft)):
+            draft = draft[:start] + replacement + draft[end:]
     return draft
 
 
@@ -326,6 +335,7 @@ class DepartmentApprovalState(TypedDict, total=False):
     metadata: dict[str, Any]
     section_id: str
     draft: str
+    currency: str
     evaluation: dict[str, Any]
     iteration_count: int
     approval_status: str          # pendiente|aprobado|rechazado|cambios_solicitados
@@ -389,6 +399,10 @@ def _run_rework_cycle(state: DepartmentApprovalState,
                                 or default_max_iterations())
     return {
         "draft": draft,
+        "currency": (_section_currency(draft)
+                     or expected_currency((state.get("metadata") or {}).get(
+                         "client_country"))
+                     or (state.get("metadata") or {}).get("currency")),
         "evaluation": evaluation,
         "iteration_count": runs + 1,
         "rework_runs": runs + 1,
@@ -599,6 +613,7 @@ def detect_conflict_node(state: CoordinatorState) -> dict[str, Any]:
     typed_sections = [
         {"department_id": dept,
          "draft_content": section.get("draft", ""),
+         "currency": section.get("currency"),
          "evaluation_results": section.get("evaluation"),
          "return_sla_breach": section.get("return_sla_breach"),
          "capacity_shortfall": section.get("capacity_shortfall"),
@@ -822,6 +837,10 @@ class ApprovalSession:
             "metadata": metadata,
             "section_id": section.get("section_id") or f"{ticket_id}:{department}",
             "draft": section.get("draft_content") or "",
+            "currency": (section.get("currency")
+                         or _section_currency(section.get("draft_content") or "")
+                         or expected_currency(metadata.get("client_country"))
+                         or metadata.get("currency")),
             "evaluation": section.get("evaluation_results") or {},
             "iteration_count": section.get("iteration_count") or 0,
             "rework_runs": section.get("rework_iteration_count") or 0,
@@ -954,6 +973,7 @@ class ApprovalSession:
                 "pending_interrupt": bool(interrupt_value),
                 "interrupt": interrupt_value,
                 "draft": values.get("draft") or "",
+                "currency": values.get("currency"),
                 "evaluation": values.get("evaluation") or {},
                 "thread_id": department_thread_id(ticket_id, dept),
             }
@@ -1043,6 +1063,7 @@ class ApprovalSession:
                 "metadata": values.get("metadata") or {},
                 "section_id": values.get("section_id") or f"{ticket_id}:{dept}",
                 "draft": values.get("draft") or "",
+                "currency": values.get("currency"),
                 "evaluation": values.get("evaluation") or {},
                 "iteration_count": values.get("iteration_count", 0),
                 "rework_runs": values.get("rework_runs", 0),
@@ -1103,6 +1124,7 @@ class ApprovalSession:
             sections[dept] = {
                 "status": values.get("approval_status", "pendiente"),
                 "draft": values.get("draft") or "",
+                "currency": values.get("currency"),
                 "evaluation": values.get("evaluation") or {},
                 "approver": values.get("approver")
                 or DEPARTMENTS.get(dept, {}).get("approver", ""),

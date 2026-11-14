@@ -19,27 +19,24 @@
 	snapshot tras reconexión, aborto real del proveedor simulado, rechazo de
 	chunks tardíos y nuevo turno. Jest cubre streaming y redirección.
 - `services/api/tests/test_chat.py`: **3 passed** (1 warning externo de
-	deprecación Starlette/AnyIO). Diagnósticos de editor para archivos afectados:
-	sin errores. No equivale a suite API completa ni a prueba con proveedor live.
-- Backoffice: `npm run lint` PASS, Jest focalizado de `/chat` **1 passed** y
-	`npm run build` PASS (incluye TypeScript y generación estática de `/chat`).
-	`git diff --check` PASS tras la revisión final.
-- ChatHub/pub-sub permanece single-process como permite el briefing; antes de
-	varias réplicas se requiere backplane. En producción se debe configurar
-	`NEXT_PUBLIC_AGENT_WS_URL` con `wss://` y redactar `token` de query string en
-	logs de proxy/API.
-- Documentados el endpoint, configuración y riesgos en los README del API y
-	backoffice y en `docs/websocket-chat-design.md`. No se modificó infraestructura,
-	workflows, secretos ni archivos de entorno. Sin commit, push ni merge; cambios
-	preexistentes ajenos permanecen intactos.
+	deprecación Starlette/AnyIO). Backoffice: lint, Jest focalizado y build
+	aprobados en la rama del PR; build incluye TypeScript y `/chat`.
+- ChatHub/pub-sub permanece single-process; antes de varias réplicas se requiere
+	backplane. En producción configurar `NEXT_PUBLIC_AGENT_WS_URL` con `wss://` y
+	redactar `token` de query string en logs de proxy/API.
+- Documentados endpoint, configuración y riesgos en README y
+	`docs/websocket-chat-design.md`. No se modificó infraestructura, workflows,
+	secretos ni archivos de entorno.
 
 ## 2026-11-12 (SSE: notificaciones de llegada RFP)
 
 - Se extiende la API RFP existente con `GET /api/rfps/events`, autenticado por
-	 el mismo `get_current_user`, owner-scoped y con evento SSE nombrado
-	 `rfp_ticket_created`; el payload contiene los campos del briefing y no datos
-	 del PDF. Se conserva `analizando` en la API existente; el evento usa el valor
-	 de contrato solicitado `analyzing`.
+	 el mismo `get_current_user`, con evento SSE `rfp_ticket_created`. El stream
+	 global está restringido a admin/manager y notifica sin filtrar por uploader;
+	 los usuarios normales conservan snapshots limitados a sus propios tickets.
+	 El payload contiene los campos del briefing y no expone datos del PDF.
+- El status del evento y del snapshot usa el valor persistido (`analizando` al
+	 inicio), sin traducirlo a `analyzing`.
 - La elegibilidad se fija al aceptar la clasificación, no al subir el PDF:
 	 `accepted_at` y metadata se confirman antes del procesamiento del grafo. Los
 	 documentos rechazados no aparecen en SSE ni recuperación. `accepted_at` es
@@ -59,10 +56,11 @@
 	compartida manteniendo SQL como recuperación al crecer.
 - Documentado diseño SSE vs WebSocket, prerrequisito de migración y prueba manual
 	 reproducible de caída, recuperación y ausencia de duplicados.
-- Validación focalizada API + grafo: 19 passed; suite Jest de reconexión/SSE:
-	 2 tests PASS. Pendiente validación final TypeScript/ESLint y diff-check.
-- Rama `feature/sse-notifications`. Se preservaron cambios locales previos en
-	`tests/pipelines/test_rag.py`, `data/raw/rfps/` y artefactos de raíz.
+- Validación focalizada: 23 tests backend RFP y 2 tests Jest de backoffice
+	 aprobados. `git diff --check` PASS. `npx tsc --noEmit` reporta referencias
+	 `.next` generadas a `app/chat/page.js` inexistente, ajenas a este cambio.
+- Rama `feature/sse-notifications`; diff basado en `main` tras integrar los PR
+	 anteriores de RFP.
 
 ## 2026-11-12 (RFP: garantia de persistencia de trazas y concurrencia)
 

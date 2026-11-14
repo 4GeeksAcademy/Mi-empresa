@@ -49,17 +49,21 @@ atomically with the extracted metadata; uploads still pending classification
 and rejected carrier pitches are not eligible. `accepted_at` is the event time
 and recovery cursor, so a ticket uploaded before the dashboard opened but
 accepted afterwards is still notified.
-Its `data:` JSON follows `sistemas-en-tiempo-real-BRIEFING.es.md`: `ticket_id`,
-`rfp_id`, `client_name`, `client_country`, `services_requested`, initial
-`status: "analyzing"`, and `created_at`. It deliberately excludes the PDF,
-filename, department extracts, and handoff. The stored legacy API status is
-`analizando`; only the SSE boundary uses the briefing's required event value.
-The stream queries the durable, owner-scoped SQL ticket table once per second,
+Its `data:` JSON includes `ticket_id`,
+`rfp_id`, `client_name`, `client_country`, `services_requested`, the persisted
+`status`, and `created_at`. Status is not translated at the event
+boundary (the initial database value is `analizando`; later values reflect
+processing progress). It deliberately excludes the PDF, filename, department
+extracts, and handoff.
+The stream is restricted to admin and manager accounts and queries all accepted
+tickets (regardless of uploader) from the durable SQL ticket table once per second,
 sends a comment keep-alive every 15 seconds, and does not depend on one API
 process or Redis Pub/Sub state.
 
 The backoffice uses `fetch` with the existing bearer JWT and reads the response
-stream. It snapshots `GET /api/rfps?created_after=<page-open-time>` before every
+stream. Admin and manager sessions snapshot all accepted tickets from
+`GET /api/rfps?created_after=<page-open-time>`; regular users remain owner-scoped.
+The page loads the snapshot before every
 stream connection/reconnection; the cutoff is evaluated against `accepted_at`,
 recovering RFPs accepted while offline (even if uploaded earlier). The same
 cutoff is sent to SSE, making snapshot/live overlap intentional and

@@ -153,7 +153,8 @@ def _strip_tables(text: str) -> str:
 def evaluate_relevance(section_text: str, context: dict[str, Any]) -> dict[str, Any]:
     """La sección responde a lo que pide la RFP para ese departamento."""
     aspects = context.get("key_aspects") or []
-    # key_aspects come from the RFP handoff and must be reproduced verbatim.
+    # Key aspects are contractual requirements from the handoff and must be
+    # reproduced verbatim in the generated response.
     missing = [aspect for aspect in aspects if aspect.strip() and aspect not in section_text]
     passed = not missing
     if passed:
@@ -175,21 +176,20 @@ def evaluate_compliance(section_text: str, context: dict[str, Any]) -> dict[str,
     expected = "EUR" if "spain" in country or "españa" in country else (
         "USD" if "united states" in country or "usa" in country else None
     )
-    found = {code for code in ("usd", "eur") if re.search(rf"\b{code}\b", text)}
-    if expected and expected.casefold() not in found:
+    found = _currency_candidates(section_text)
+    if expected and expected not in found:
         violations.append({
             "rule_id": "currency-by-country",
             "message": f"La sección debe cotizar en {expected} (client_country={context.get('client_country')}).",
         })
-    elif expected and found - {expected.casefold()}:
-        others = ", ".join(sorted(found - {expected.casefold()})).upper()
+    elif expected and found - {expected}:
+        others = ", ".join(sorted(found - {expected})).upper()
         violations.append({
             "rule_id": "currency-by-country",
             "message": f"Se cotiza en {others} cuando el país del cliente exige {expected}.",
         })
 
-    # A percentage elsewhere (such as the discounts table) is not an SLA.
-    # Require the contractual 90% on-time delivery commitment.
+    # A percentage elsewhere (for example, a discount) is not an on-time SLA.
     if not re.search(
         r"\b90\s?%\s*(?:de\s*)?(?:las\s*)?entregas\s+a\s+tiempo"
         r"|\b(?:sla|entregas\s+a\s+tiempo)\b[^.!?\n]{0,80}\b90\s?%",
@@ -200,30 +200,13 @@ def evaluate_compliance(section_text: str, context: dict[str, Any]) -> dict[str,
             "message": "Falta el SLA de entregas a tiempo expresado como porcentaje.",
         })
 
-    return_terms = r"(?:devoluci[oó]n(?:es)?|returns?|reverse logistics)"
-    for match in re.finditer(r"(\d{1,3})\s*(?:h|hr|hrs|horas|hours)\b", text):
-        if int(match.group(1)) < 48:
-            # Delivery lead times (e.g. express shipping) are not return times.
-            sentence_start = max(
-                text.rfind(".", 0, match.start()),
-                text.rfind("!", 0, match.start()),
-                text.rfind("?", 0, match.start()),
-                text.rfind("\n", 0, match.start()),
-            ) + 1
-            sentence_end_candidates = [
-                pos for char in ".!?\n"
-                if (pos := text.find(char, match.end())) != -1
-            ]
-            sentence_end = min(sentence_end_candidates, default=len(text))
-            sentence = text[sentence_start:sentence_end]
-            if not re.search(return_terms, sentence):
-                continue
-            snippet = section_text[sentence_start:sentence_end].strip().replace("\n", " ")
-            violations.append({
-                "rule_id": "returns-window-48h",
-                "message": f"Promete devoluciones en menos de 48 h: «{snippet}».",
-            })
-            break
+    for start, end, _hours, replacement in _returns_sla_breaches(section_text):
+        snippet = section_text[max(0, start - 40):min(len(section_text), end + 40)]
+        violations.append({
+            "rule_id": "returns-window-48h",
+            "message": f"Promete devoluciones en menos de 48 h: «{snippet.strip()}».",
+        })
+        break
 
     if not (re.search(r"\|\s*(?:descuento|discount)", text) or "tabla de descuentos" in text):
         violations.append({
@@ -236,7 +219,6 @@ def evaluate_compliance(section_text: str, context: dict[str, Any]) -> dict[str,
         name = match.group(0)
         if name.lower() in {"trackflow", "express", "standard"}:
             continue
-        # Compare against the already-casefolded section text.
         normalized_name = name.casefold()
         if any(pattern.format(t=normalized_name) in text for pattern in forbidden):
             violations.append({
@@ -653,6 +635,196 @@ def run_response_generation(
     }
 
 
+def _expected_currency(metadata: dict[str, Any]) -> str | None:
+    country = str(metadata.get("client_country") or "").casefold()
+    if "spain" in country or "españa" in country:
+        return "EUR"
+    if "united states" in country or "usa" in country or country == "us":
+        return "USD"
+    value = str(metadata.get("currency") or "").upper()
+    return value if value in {"USD", "EUR"} else None
+
+
+_CURRENCY_MARKERS = re.compile(
+    r"(?P<usd>US\s*\$|\bUSD\b|\bU\.?S\.?\s*dollars?\b|"
+    r"\bd[oó]lares?\b|\bdollars?\b|\$)"
+    r"|(?P<eur>\bEUR\b|€|\beuros?\b)", re.IGNORECASE,
+)
+
+
+def _currency_candidates(text: str) -> set[str]:
+    return {"USD" if match.lastgroup == "usd" else "EUR"
+            for match in _CURRENCY_MARKERS.finditer(text)}
+
+
+def _section_currency(text: str) -> str | None:
+    """Return USD/EUR, MIXED for contradictory markers, or None if absent."""
+    currencies = _currency_candidates(text)
+    if len(currencies) > 1:
+        return "MIXED"
+    return next(iter(currencies), None)
+
+
+def _normalize_currency_markers(text: str, expected: str) -> str:
+    """Rewrite recognized monetary markers without relying on prose codes."""
+    if expected not in {"USD", "EUR"}:
+        return text
+
+    def replace(match: re.Match[str]) -> str:
+        if match.group("usd") and match.group(0) == "$":
+            return f"{expected} "
+        return expected
+
+    return _CURRENCY_MARKERS.sub(replace, text)
+
+
+_RETURN_TERMS = re.compile(
+    r"devoluci[oó]n(?:es)?|retorno(?:s)?|reembolso(?:s)?|"
+    r"\breturns?\b|reverse[ -]logistics", re.IGNORECASE,
+)
+_DELIVERY_TERMS = re.compile(
+    r"entrega(?:s)?|delivery|deliver(?:y|ies|ed)?|last[ -]?mile|env[ií]o(?:s)?",
+    re.IGNORECASE,
+)
+_DURATION = re.compile(
+    r"(?P<comparator>no\s+menos\s+de|menos\s+de|not\s+less\s+than|"
+    r"less\s+than|no\s+m[aá]s\s+de|not\s+more\s+than|"
+    r"not\s+under|not\s+below|at\s+most|up\s+to|under|below|within|in|en|<)?\s*"
+    r"(?P<value>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>days?|d[ií]as?|d|hours?|hrs?|horas?|h|"
+    r"minutes?|mins?|minutos?|min|seconds?|secs?|segundos?|sec)\b",
+    re.IGNORECASE,
+)
+_RANGE_DURATION = re.compile(
+    r"(?P<low>\d+(?:[.,]\d+)?)\s*(?:-|–|—|to|a)\s*"
+    r"(?P<high>\d+(?:[.,]\d+)?)\s*"
+    r"(?P<unit>days?|d[ií]as?|d|hours?|hrs?|horas?|h|"
+    r"minutes?|mins?|minutos?|min|seconds?|secs?|segundos?|sec)\b",
+    re.IGNORECASE,
+)
+
+
+def _duration_hours(match: re.Match[str]) -> float:
+    value = float(match.group("value").replace(",", "."))
+    unit = match.group("unit").casefold()
+    if unit.startswith(("day", "d")):
+        return value * 24
+    if unit.startswith(("min",)):
+        return value / 60
+    if unit.startswith(("sec", "seg")):
+        return value / 3600
+    return value
+
+
+def _returns_sla_breaches(text: str) -> list[tuple[int, int, float, str]]:
+    """Find explicit return-processing commitments below 48 hours.
+
+    The supported rule-based grammar covers common Spanish/English duration
+    units, decimals, upper bounds, and ranges. Each commitment is scoped to a
+    clause (sentence/semicolon/newline); this is intentionally not general NLP.
+    """
+    breaches: list[tuple[int, int, float, str]] = []
+    # Keep decimal points inside durations (e.g. 1.5 days) within a clause.
+    clause_pattern = re.compile(r"(?:[^.!?;\n]|\.(?=\d))+(?:[.!?;\n]|$)")
+    for clause_match in clause_pattern.finditer(text):
+        clause = clause_match.group(0)
+        concepts = [(match.start(), match.end(), "return")
+                    for match in _RETURN_TERMS.finditer(clause)]
+        concepts.extend((match.start(), match.end(), "delivery")
+                        for match in _DELIVERY_TERMS.finditer(clause))
+        if not concepts:
+            continue
+        concepts.sort()
+
+        ranges = list(_RANGE_DURATION.finditer(clause))
+        durations: list[tuple[int, int, float, bool, str, int, int]] = []
+        for match in _DURATION.finditer(clause):
+            # Range components are not independent commitments: in 24–72 h,
+            # neither endpoint alone represents the SLA.
+            if any(match.start() >= rng.start() and match.end() <= rng.end()
+                   for rng in ranges):
+                continue
+            hours = _duration_hours(match)
+            comparator = (match.group("comparator") or "").casefold()
+            lower_bound = comparator in {"no menos de", "not less than"}
+            # Only comparators before the numeric value define a bound. A
+            # preceding link word like "in/en" is not itself the duration span.
+            expression_start = (match.start("comparator")
+                                if comparator and comparator not in {"in", "en"}
+                                else match.start("value"))
+            comparator_start = (match.start("comparator")
+                                if comparator else match.start("value"))
+            durations.append((match.start(), match.end(), hours, not lower_bound,
+                              comparator, expression_start,
+                              match.start("comparator") if comparator
+                              else match.start("value")))
+
+        for match in ranges:
+            unit = match.group("unit").casefold()
+            if unit.startswith(("day", "d")):
+                factor = 24
+            elif unit.startswith("min"):
+                factor = 1 / 60
+            elif unit.startswith(("sec", "seg")):
+                factor = 1 / 3600
+            else:
+                factor = 1
+            high = float(match.group("high").replace(",", ".")) * factor
+            durations.append((match.start(), match.end(), high, high < 48,
+                              "range", match.start(), match.start()))
+
+        for (start, end, hours, upper_bound, comparator, expression_start,
+             comparator_start) in durations:
+            if not upper_bound or hours > 48:
+                continue
+            strict_bound = comparator in {"menos de", "less than", "under", "below", "<"}
+            if hours == 48 and not strict_bound:
+                continue
+
+            # A duration only belongs to the nearest return/delivery mention
+            # inside its clause. This prevents another sentence's returns from
+            # changing a last-mile delivery SLA.
+            nearby = [concept for concept in concepts
+                      if abs(start - concept[1]) <= 100
+                      or abs(concept[0] - end) <= 100]
+            if not nearby:
+                continue
+            nearest = min(nearby, key=lambda item: min(
+                abs(start - item[1]), abs(item[0] - end)))
+            if nearest[2] != "return":
+                continue
+
+            prefix = clause[max(0, comparator_start - 40):comparator_start]
+            negative_comparator = comparator in {"not under", "not below"}
+            denial_prefix = clause[max(0, nearest[0] - 50):nearest[0]]
+            denied_commitment = re.search(
+                r"\bno\s+(?:se\s+)?(?:promete|prometemos|procesa|"
+                r"procesamos|garantiza|garantizamos)\b",
+                denial_prefix, re.IGNORECASE,
+            )
+            negative_wording = (
+                comparator_start < expression_start
+                and bool(re.search(
+                    r"\b(?:not|never|no)\s*$", prefix, re.IGNORECASE))
+            )
+            if (negative_comparator or comparator.startswith("not ")
+                    or negative_wording or denied_commitment):
+                continue
+
+            absolute_start = clause_match.start() + expression_start
+            absolute_end = clause_match.start() + end
+            breaches.append((absolute_start, absolute_end, hours, "48 horas"))
+
+    return breaches
+
+
+def _handoff_currency(text: str, metadata: dict[str, Any]) -> str | None:
+    currency = _section_currency(text)
+    if currency is not None:
+        return currency
+    return _expected_currency(metadata)
+
+
 def build_part3_handoff(
     handoff: dict[str, Any],
     sections: list[dict[str, Any]],
@@ -670,6 +842,8 @@ def build_part3_handoff(
                 "section_id": section["section_id"],
                 "approver": section["approver"],
                 "draft_content": section["draft_content"],
+                "currency": _handoff_currency(
+                    section["draft_content"], handoff.get("metadata") or {}),
                 "evaluation_results": section["evaluation_results"],
                 "approval_status": section["approval_status"],
                 "needs_human_review": section["needs_human_review"],
