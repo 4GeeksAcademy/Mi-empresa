@@ -10,7 +10,8 @@ app = Celery(
     "trackflow",
     broker=redis_url,
     backend=redis_url,
-    include=["services.incident_tasks", "services.rfp_tasks"],
+    include=["services.incident_tasks", "services.rfp_tasks",
+             "services.response_tasks"],
 )
 app.conf.update(
     task_serializer="json",

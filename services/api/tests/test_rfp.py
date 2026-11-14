@@ -87,3 +87,74 @@ def test_worker_persists_metadata_workstreams_and_handoff(rfp_client, monkeypatc
     assert polled["metadata"]["currency"] == "EUR"
     assert [section["department_id"] for section in polled["department_sections"]] == ["warehouse"]
     assert polled["handoff"]["ticket_id"] == ticket_id
+
+
+def test_response_endpoints_enqueue_and_persist_handoff(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    import services.rfp_tasks as rfp_tasks
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf",
+                                                        "application/pdf")}).json()
+    ticket_id = created["ticket_id"]
+
+    # 409 mientras no esté analisis_completo
+    assert client.post(f"/api/rfps/{ticket_id}/response").status_code == 409
+
+    # ticket en analisis_completo pero SIN synthesizer_payload -> 409
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        ticket.status = "analisis_completo"
+        session.add(ticket)
+        session.commit()
+    assert client.post(f"/api/rfps/{ticket_id}/response").status_code == 409
+
+    published = []
+    monkeypatch.setattr(
+        rfp_route, "enqueue_response",
+        lambda tid: published.append({"args": [tid],
+                                      "task_id": f"{tid}-response"}),
+    )
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        ticket.synthesizer_payload = {"handoff": {"ticket_id": ticket_id}}
+        session.add(ticket)
+        session.commit()
+
+    response = client.post(f"/api/rfps/{ticket_id}/response")
+    assert response.status_code == 202, response.text
+    assert response.json() == {"ticket_id": ticket_id,
+                               "status": "generando_borrador"}
+    assert published == [{"args": [ticket_id], "task_id": f"{ticket_id}-response"}]
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        assert ticket.status == "generando_borrador"
+
+
+def test_get_response_returns_persisted_sections_and_handoff(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _tid: None)
+    monkeypatch.setattr(rfp_route, "enqueue_response", lambda _tid: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf",
+                                                        "application/pdf")}).json()
+    ticket_id = created["ticket_id"]
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(ticket_id))
+        ticket.status = "en_evaluación"
+        ticket.synthesizer_payload = {"handoff": {"ticket_id": ticket_id}}
+        ticket.response_handoff = {"ticket_id": ticket_id,
+                                   "contract_version": "2.0"}
+        session.add(ticket)
+        session.commit()
+
+    polled = client.get(f"/api/rfps/{ticket_id}/response").json()
+    assert polled["ticket_id"] == ticket_id
+    assert polled["status"] == "en_evaluación"
+    assert polled["handoff"]["contract_version"] == "2.0"
+    assert polled["sections"] == []
+    # dueño distinto -> 404
+    app.dependency_overrides[get_current_user] = lambda: {"id": 7}
+    assert client.get(f"/api/rfps/{ticket_id}/response").status_code == 404

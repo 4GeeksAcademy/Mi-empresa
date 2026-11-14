@@ -170,6 +170,8 @@ class RfpTicket(SQLModel, table=True):
     classification_reason: str | None = SQLField(default=None, sa_type=Text)
     processing_error: str | None = SQLField(default=None, sa_type=Text)
     synthesizer_payload: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    # Parte 2: handoff de generación/evaluación hacia la Parte 3
+    response_handoff: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
     created_at: datetime = SQLField(default_factory=utc_now)
     updated_at: datetime = SQLField(default_factory=utc_now)
 
@@ -202,4 +204,12 @@ class DepartmentSectionRecord(SQLModel, table=True):
     open_questions: list[str] = SQLField(default_factory=list, sa_column=Column(JSON().with_variant(JSONB, "postgresql"), nullable=False))
     source_extract: str = SQLField(default="", sa_type=Text)
     approver: str = SQLField(max_length=120)
+    # Parte 2: borrador de la propuesta + resultado de evaluación estructurado
+    draft_content: str | None = SQLField(default=None, sa_type=Text)
+    evaluation_results: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    approval_status: str = SQLField(default="pendiente", max_length=32)
+    iteration_count: int = SQLField(default=0)
+    needs_human_review: bool = SQLField(default=False)
+    evaluated_at: datetime | None = SQLField(default=None)
+    approved_at: datetime | None = SQLField(default=None)
     created_at: datetime = SQLField(default_factory=utc_now)
