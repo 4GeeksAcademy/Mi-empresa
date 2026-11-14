@@ -56,12 +56,8 @@ def create_access_token(data: dict[str, Any], expires_delta: timedelta | None = 
     return jwt.encode(to_encode, secret_key, algorithm=ALGORITHM)
 
 
-async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
-    """
-    Dependencia de FastAPI que extrae el token Bearer, lo valida,
-    recupera el usuario de TinyDB y lo devuelve.
-    Lanza HTTPException 401 si algo falla.
-    """
+def authenticate_access_token(token: str) -> dict[str, Any]:
+    """Valida un access token para HTTP y transportes sin cabecera Bearer."""
     credentials_exception = HTTPException(
         status_code=status.HTTP_401_UNAUTHORIZED,
         detail="No se pudieron validar las credenciales.",
@@ -89,6 +85,11 @@ async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any
     if state is not None:
         state["userId"] = str(user["id"])
     return user
+
+
+async def get_current_user(token: str = Depends(oauth2_scheme)) -> dict[str, Any]:
+    """Dependencia HTTP para el access token Bearer de la API."""
+    return authenticate_access_token(token)
 
 
 async def get_current_admin(current_user: dict[str, Any] = Depends(get_current_user)) -> dict[str, Any]:

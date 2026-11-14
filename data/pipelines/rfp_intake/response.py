@@ -153,8 +153,9 @@ def _strip_tables(text: str) -> str:
 def evaluate_relevance(section_text: str, context: dict[str, Any]) -> dict[str, Any]:
     """La sección responde a lo que pide la RFP para ese departamento."""
     aspects = context.get("key_aspects") or []
-    text = section_text.casefold()
-    missing = [aspect for aspect in aspects if aspect.strip() and aspect.casefold() not in text]
+    # Key aspects are contractual requirements from the handoff and must be
+    # reproduced verbatim in the generated response.
+    missing = [aspect for aspect in aspects if aspect.strip() and aspect not in section_text]
     passed = not missing
     if passed:
         details = "La sección cubre todos los aspectos clave extraídos de la RFP."
@@ -188,7 +189,12 @@ def evaluate_compliance(section_text: str, context: dict[str, Any]) -> dict[str,
             "message": f"Se cotiza en {others} cuando el país del cliente exige {expected}.",
         })
 
-    if not re.search(r"\b\d{1,3}\s?%", section_text):
+    # A percentage elsewhere (for example, a discount) is not an on-time SLA.
+    if not re.search(
+        r"\b90\s?%\s*(?:de\s*)?(?:las\s*)?entregas\s+a\s+tiempo"
+        r"|\b(?:sla|entregas\s+a\s+tiempo)\b[^.!?\n]{0,80}\b90\s?%",
+        text,
+    ):
         violations.append({
             "rule_id": "on-time-sla-required",
             "message": "Falta el SLA de entregas a tiempo expresado como porcentaje.",
@@ -213,7 +219,8 @@ def evaluate_compliance(section_text: str, context: dict[str, Any]) -> dict[str,
         name = match.group(0)
         if name.lower() in {"trackflow", "express", "standard"}:
             continue
-        if any(pattern.format(t=name) in text for pattern in forbidden):
+        normalized_name = name.casefold()
+        if any(pattern.format(t=normalized_name) in text for pattern in forbidden):
             violations.append({
                 "rule_id": "carrier-rates-confidential",
                 "message": f"Revela tarifas negociadas con el transportista {name}.",
@@ -673,7 +680,7 @@ def _normalize_currency_markers(text: str, expected: str) -> str:
 
 _RETURN_TERMS = re.compile(
     r"devoluci[oó]n(?:es)?|retorno(?:s)?|reembolso(?:s)?|"
-    r"returns?|reverse[ -]logistics", re.IGNORECASE,
+    r"\breturns?\b|reverse[ -]logistics", re.IGNORECASE,
 )
 _DELIVERY_TERMS = re.compile(
     r"entrega(?:s)?|delivery|deliver(?:y|ies|ed)?|last[ -]?mile|env[ií]o(?:s)?",
