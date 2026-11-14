@@ -13,6 +13,7 @@ from fastapi.responses import StreamingResponse
 from sqlmodel import Session, select
 
 from auth import get_current_user
+from auth_models import UserRole
 from data.pipelines.rfp_intake.approval import (
     DecisionValidationError,
     validate_decision,
@@ -81,18 +82,16 @@ def _ticket_created_payload(ticket: RfpTicket, metadata: RfpMetadataRecord | Non
         "client_name": metadata.client_name if metadata else None,
         "client_country": metadata.client_country if metadata else None,
         "services_requested": metadata.services_requested if metadata else [],
-        # This is the initial state named by the TrackFlow real-time briefing.
-        "status": "analyzing",
+        "status": ticket.status,
         "created_at": (ticket.accepted_at or ticket.created_at).isoformat(),
     }
 
 
-def _new_rfp_tickets(owner_id: str, created_after: datetime, ticket_after: UUID) -> list[tuple[RfpTicket, RfpMetadataRecord | None]]:
+def _new_rfp_tickets(created_after: datetime, ticket_after: UUID) -> list[tuple[RfpTicket, RfpMetadataRecord | None]]:
     with Session(get_engine()) as session:
         tickets = session.exec(
             select(RfpTicket)
             .where(
-                RfpTicket.owner_id == owner_id,
                 RfpTicket.classification_result.is_(True),
                 RfpTicket.accepted_at.is_not(None),
                 (RfpTicket.accepted_at > created_after)
@@ -103,13 +102,13 @@ def _new_rfp_tickets(owner_id: str, created_after: datetime, ticket_after: UUID)
         return [(ticket, session.get(RfpMetadataRecord, ticket.ticket_id)) for ticket in tickets]
 
 
-async def _rfp_event_stream(owner_id: str, created_after: datetime):
+async def _rfp_event_stream(created_after: datetime):
     last_created_at = created_after
     last_ticket_id = UUID(int=0)
     last_keep_alive = datetime.now(timezone.utc)
     while True:
         tickets = await asyncio.to_thread(
-            _new_rfp_tickets, owner_id, last_created_at, last_ticket_id
+            _new_rfp_tickets, last_created_at, last_ticket_id
         )
         for ticket, metadata in tickets:
             payload = json.dumps(_ticket_created_payload(ticket, metadata), separators=(",", ":"))
@@ -128,10 +127,12 @@ def stream_rfp_tickets(
     since: datetime | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
-    """Stream owner-scoped tickets registered after the supplied snapshot cursor."""
+    """Stream accepted tickets to authenticated backoffice staff."""
+    if current_user.get("role") not in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+        raise HTTPException(status_code=403, detail="Se requiere acceso al backoffice.")
     cursor = since or datetime.now(timezone.utc)
     return StreamingResponse(
-        _rfp_event_stream(str(current_user["id"]), cursor),
+        _rfp_event_stream(cursor),
         media_type="text/event-stream",
         headers={
             "Cache-Control": "no-cache, no-transform",
@@ -146,13 +147,14 @@ def list_rfp_tickets(
     created_after: datetime | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
 ) -> list[dict]:
-    """Return owner-scoped snapshots; created_after supports complete reconnect recovery."""
+    """Return snapshots for staff or owned snapshots for regular users."""
     with Session(get_engine()) as session:
         statement = select(RfpTicket).where(
-            RfpTicket.owner_id == str(current_user["id"]),
             RfpTicket.classification_result.is_(True),
             RfpTicket.accepted_at.is_not(None),
         )
+        if current_user.get("role") not in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+            statement = statement.where(RfpTicket.owner_id == str(current_user["id"]))
         if created_after is not None:
             statement = statement.where(RfpTicket.accepted_at >= created_after)
         tickets = session.exec(statement.order_by(RfpTicket.accepted_at.desc())).all()

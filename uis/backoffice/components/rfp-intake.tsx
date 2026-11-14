@@ -66,7 +66,7 @@ export function RfpIntake() {
         for (const item of tickets) {
           if (item.accepted_at && new Date(item.accepted_at) >= new Date(pageOpenedAt)) {
             addArrival({ ticket_id: item.ticket_id, rfp_id: item.rfp_id, client_name: item.metadata?.client_name ?? null,
-              client_country: item.metadata?.client_country ?? null, services_requested: item.metadata?.services_requested ?? [], status: "analyzing",
+              client_country: item.metadata?.client_country ?? null, services_requested: item.metadata?.services_requested ?? [], status: item.status,
               created_at: item.accepted_at });
           }
         }

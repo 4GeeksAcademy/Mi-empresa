@@ -78,8 +78,8 @@ def test_rfp_sse_stream_uses_named_event_and_briefing_payload(rfp_client, monkey
         session.commit()
     original_stream = rfp_route._rfp_event_stream
 
-    async def one_event(owner_id: str, cursor: datetime):
-        stream = original_stream(owner_id, cursor)
+    async def one_event(cursor: datetime):
+        stream = original_stream(cursor)
         try:
             yield await anext(stream)
         finally:
@@ -92,7 +92,7 @@ def test_rfp_sse_stream_uses_named_event_and_briefing_payload(rfp_client, monkey
 
     import routes.rfp as rfp_route
     response = rfp_route.stream_rfp_tickets(
-        since=datetime.fromisoformat("2000-01-01T00:00:00+00:00"), current_user={"id": 42}
+        since=datetime.fromisoformat("2000-01-01T00:00:00+00:00"), current_user={"id": 42, "role": "manager"}
     )
     assert response.media_type == "text/event-stream"
     assert response.headers["cache-control"] == "no-cache, no-transform"
@@ -104,7 +104,7 @@ def test_rfp_sse_stream_uses_named_event_and_briefing_payload(rfp_client, monkey
     assert json.loads(data_line) == {
         "ticket_id": created["ticket_id"], "rfp_id": created["rfp_id"],
         "client_name": "Northline Apparel", "client_country": "US",
-        "services_requested": ["warehouse", "lastmile"], "status": "analyzing",
+        "services_requested": ["warehouse", "lastmile"], "status": "analizando",
         "created_at": expected_created_at,
     }
     assert "raw_pdf_path" not in data_line and "filename" not in data_line
@@ -130,6 +130,38 @@ def test_rfp_snapshot_recovery_is_owner_scoped_and_filters_created_after(rfp_cli
         "/api/rfps", params={"created_after": accepted_at}
     ).json()] == [created["ticket_id"]]
     assert client.get("/api/rfps", params={"created_after": "2999-01-01T00:00:00Z"}).json() == []
+
+
+def test_backoffice_user_receives_another_users_accepted_rfp(rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    created = client.post("/api/rfps", files={"file": ("request.pdf", b"pdf", "application/pdf")}).json()
+    with Session(engine) as session:
+        ticket = session.get(RfpTicket, UUID(created["ticket_id"]))
+        ticket.classification_result = True
+        ticket.accepted_at = datetime.now(timezone.utc)
+        session.add(RfpMetadataRecord(ticket_id=ticket.ticket_id, client_name="Northline Apparel"))
+        session.commit()
+
+    # The uploader is user 42; a different manager should get the event.
+    app.dependency_overrides[get_current_user] = lambda: {"id": 99, "role": "manager"}
+    stream = rfp_route.stream_rfp_tickets(
+        since=datetime.fromisoformat("2000-01-01T00:00:00+00:00"),
+        current_user={"id": 99, "role": "manager"},
+    )
+    frame = asyncio.run(anext(stream.body_iterator))
+    asyncio.run(stream.body_iterator.aclose())
+    frame = frame.decode() if isinstance(frame, bytes) else frame
+    assert f"id: {created['ticket_id']}\nevent: rfp_ticket_created\ndata: " in frame
+    payload = json.loads(next(line[6:] for line in frame.splitlines() if line.startswith("data: ")))
+    assert payload["status"] == "analizando"
+    assert payload["client_name"] == "Northline Apparel"
+
+    # Reconnect snapshots use the same staff audience so no arrivals are missed.
+    assert [item["ticket_id"] for item in client.get(
+        "/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}
+    ).json()] == [created["ticket_id"]]
 
     app.dependency_overrides[get_current_user] = lambda: {"id": 7}
     assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).json() == []
@@ -194,6 +226,12 @@ def test_rfp_sse_requires_authentication(rfp_client):
     client, _, _ = rfp_client
     app.dependency_overrides.clear()
     assert client.get("/api/rfps/events").status_code == 401
+
+
+def test_rfp_sse_rejects_regular_user_for_global_stream(rfp_client):
+    client, _, _ = rfp_client
+    app.dependency_overrides[get_current_user] = lambda: {"id": 42, "role": "user"}
+    assert client.get("/api/rfps/events").status_code == 403
 
 
 def test_migration_runner_includes_sse_acceptance_migration():

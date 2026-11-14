@@ -45,7 +45,7 @@ describe("RfpIntake SSE notifications", () => {
     const ticketId = "ticket-123";
     const payload = {
       ticket_id: ticketId, rfp_id: "rfp-123", client_name: "Northline Apparel", client_country: "US",
-      services_requested: ["warehouse"], status: "analyzing", created_at: acceptedAt,
+      services_requested: ["warehouse"], status: "analizando", created_at: acceptedAt,
     };
     jest.mocked(fetch)
       .mockResolvedValueOnce({
