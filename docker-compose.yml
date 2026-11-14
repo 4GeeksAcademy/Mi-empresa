@@ -45,10 +45,13 @@ services:
       - ./packages:/app/packages:ro
       - ./docs/telemetry:/docs/telemetry:ro
       - task_data:/var/lib/trackflow/tasks
+      - rfp_checkpoints:/app/data/checkpoints
       - ./data/raw:/app/data/raw
     networks:
       - trackflow-dev
     depends_on:
+      rfp-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
       qdrant:
@@ -60,6 +63,16 @@ services:
       retries: 12
       start_period: 10s
     command: ["uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--reload"]
+
+  rfp-migrate:
+    build: *api-build
+    working_dir: /app/api
+    env_file:
+      - .env
+    command: ["python", "apply_rfp_approval_migration.py"]
+    networks:
+      - trackflow-dev
+    restart: "no"
 
   redis:
     image: redis:7.4-alpine
@@ -91,6 +104,8 @@ services:
   worker:
     build: *api-build
     working_dir: /app/services/api
+    env_file:
+      - .env
     environment:
       PYTHONPATH: /app:/app/services/api
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
@@ -100,10 +115,13 @@ services:
       - ./services:/app/services
       - ./packages:/app/packages:ro
       - task_data:/var/lib/trackflow/tasks
+      - rfp_checkpoints:/app/data/checkpoints
       - ./data/raw:/app/data/raw
     networks:
       - trackflow-dev
     depends_on:
+      rfp-migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_healthy
     restart: unless-stopped
@@ -149,6 +167,7 @@ volumes:
   backoffice_node_modules:
   redis_data:
   task_data:
+  rfp_checkpoints:
   flower_data:
   qdrant_data:
 

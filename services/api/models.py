@@ -172,6 +172,8 @@ class RfpTicket(SQLModel, table=True):
     synthesizer_payload: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
     # Parte 2: handoff de generación/evaluación hacia la Parte 3
     response_handoff: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    # Parte 3: documento final consolidado (solo cuando todas las secciones están aprobadas)
+    final_document: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
     created_at: datetime = SQLField(default_factory=utc_now)
     updated_at: datetime = SQLField(default_factory=utc_now)
 
@@ -210,6 +212,26 @@ class DepartmentSectionRecord(SQLModel, table=True):
     approval_status: str = SQLField(default="pendiente", max_length=32)
     iteration_count: int = SQLField(default=0)
     needs_human_review: bool = SQLField(default=False)
+    # Parte 3: ciclo de rework (límite de iteraciones) y decisión humana
+    rework_runs: int = SQLField(default=0)
+    decision: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    arbitration_blocked: bool = SQLField(default=False)
     evaluated_at: datetime | None = SQLField(default=None)
     approved_at: datetime | None = SQLField(default=None)
     created_at: datetime = SQLField(default_factory=utc_now)
+
+
+class RfpNodeTrace(SQLModel, table=True):
+    """Trazabilidad por ejecución de nodo del flujo agéntico de RFPs."""
+
+    __tablename__ = "rfp_node_traces"
+    __table_args__ = (Index("ix_rfp_node_traces_ticket", "ticket_id", "timestamp"),)
+
+    id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), primary_key=True))
+    ticket_id: UUID = SQLField(foreign_key="rfp_tickets.ticket_id", index=True)
+    node: str = SQLField(max_length=64)
+    agent: str = SQLField(max_length=120)
+    department: str | None = SQLField(default=None, max_length=32)
+    input: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    output: dict | None = SQLField(default=None, sa_column=Column(JSON().with_variant(JSONB, "postgresql")))
+    timestamp: datetime = SQLField(default_factory=utc_now)

@@ -1,5 +1,33 @@
 # Progress Log
 
+## 2026-11-12 (RFP: garantia de persistencia de trazas y concurrencia)
+
+- Confirmado y probado que `services/rfp_approval_tasks.py::_trace_sink` vuelve a lanzar los errores de SQL al guardar `RfpNodeTrace`; las regresiones verifican tanto escritura como propagacion del fallo.
+- `ApprovalSession._trace()` ahora registra y vuelve a lanzar las excepciones del callback; la prueba `test_trace_sink_failure_propagates` acredita que el error cruza esa capa para que la tarea Celery pueda gestionarlo/reintentarlo.
+- Nueva regresión `test_approval_task_retries_when_trace_persistence_fails`: ejecuta la tarea Celery en eager con fallo del sink y confirma las llamadas de retry con countdown=30, agotando `max_retries=2` después de dos reintentos.
+- La aprobacion concurrente usa un `open_approval_env` independiente por hilo sobre el mismo archivo SQLite y comprueba que sobreviven ambas decisiones. Esto cubre sesiones/savers independientes en hilos, no ejecucion de workers ni procesos reales concurrentes.
+- Validacion focalizada API + pipeline RFP: **24 passed**, 1 warning externo de deprecacion Starlette/AnyIO; `git diff --check` PASS.
+- El reintento de Celery se verificó localmente en eager; no se ejecutó worker/broker real ni fallo live de PostgreSQL. No se afirma validación de despliegue.
+- Sin cambios en `.env`, sin commit/push/PR y sin afirmacion de concurrencia multi-proceso o persistencia live en PostgreSQL/Redis.
+
+## 2026-11-12 (Hito 9 Parte 3: aprobacion y cierre de RFP)
+
+- Finalizado el flujo de aprobacion humana por departamento sobre el mismo ticket: ramas independientes con pausa/reanudacion, decisiones validadas por responsable e `interrupt_id`, rework/arbitraje y documento final persistido solo al completar las aprobaciones activas. Checkpointer LangGraph en SQLite persistente compartido; SQLModel/PostgreSQL conserva estado, decisiones, documento y trazas de nodos.
+- API owner-scoped para iniciar y consultar aprobaciones, registrar decisiones y recuperar el documento final. El inicio requiere RFP clasificada positivamente; decisiones fuera de un ciclo activo se rechazan; si falla la publicacion al broker se restaura el estado previo para permitir reintento; el documento solo se sirve en estado `terminado`.
+- Backoffice integrado con polling, extractos y evaluacion por seccion, comentarios para rechazo/cambios y controles desactivados mientras falte interrupt o el arbitraje bloquee la seccion. Corregida regla ESLint de actualizacion de estado en el efecto.
+- Migracion `services/api/migrations/20261201_rfp_approval.sql` y guia operativa en `services/api/README.md`: aplicar la migracion en PostgreSQL y montar el mismo volumen de checkpoints en API/workers antes de desplegar.
+- Cobertura API ampliada para inicio, elegibilidad, fallo de cola/reintento, duplicado, aprobador e interrupt, aislamiento por propietario y acceso al documento final. Los escenarios de pipeline ya cubren interrupt/resume, rework, arbitraje, paralelismo y ciclo end-to-end.
+- Validacion ejecutada: tests focalizados API + aprobacion **15 passed**; backoffice ESLint PASS y Jest **4 suites / 15 tests passed**; `uv lock --check --project services/api` PASS; `git diff --check` PASS. El unico warning pytest es la deprecacion externa de `anyio.abc.BlockingPortal` usada por Starlette TestClient.
+- Se eliminaron declaraciones duplicadas de LangGraph/checkpointer y dependencias ajenas de la ampliacion del manifiesto. El lock existente sigue sincronizado; no se modificaron cambios ajenos. No se hizo commit, push ni PR.
+- Pendiente de despliegue: aplicar la migracion y asegurar volumen SQLite compartido/persistente en el entorno operativo; no se ejecutaron servicios externos ni se declaran verificaciones live de broker o PostgreSQL de produccion.
+
+## 2026-11-12 (Compose para despliegue RFP Parte 3)
+
+- Compose define `rfp-migrate` como tarea one-shot antes de backend y worker; usa `DATABASE_URL` del `.env` y ejecuta en orden las migraciones RFP Intake, Parte 2 y Parte 3 idempotentes. Si falla, los servicios dependientes quedan bloqueados.
+- El mismo volumen nombrado `rfp_checkpoints` se monta en API y worker en `/app/data/checkpoints`; se documenta no borrarlo para conservar los interrupts pendientes.
+- `services/Dockerfile` incluye ahora el módulo `services/rfp_approval_tasks.py` para que la imagen de producción contenga las tareas Celery de aprobación, no solo el entorno de desarrollo montado.
+- No se ejecutó migración ni Compose contra PostgreSQL real; se limita la validación a configuración/local.
+
 ## 2026-11-02 (publicacion del hito de memoria)
 
 - Usuario autoriza commit, push y PR en Hugo-VC/Mi-empresa, limitado a la tarea de memoria. Alcance: agente, integracion API, pruebas de memoria, READMEs, briefing y progreso. Excluidos cambios locales de ambos uv.lock y services/data/incidents.json; no se accede a archivos restringidos.
