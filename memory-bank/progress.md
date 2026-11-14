@@ -1,5 +1,39 @@
 # Progress Log
 
+## 2026-11-12 (SSE: notificaciones de llegada RFP)
+
+- Se extiende la API RFP existente con `GET /api/rfps/events`, autenticado por
+	 el mismo `get_current_user`, con evento SSE `rfp_ticket_created`. El stream
+	 global está restringido a admin/manager y notifica sin filtrar por uploader;
+	 los usuarios normales conservan snapshots limitados a sus propios tickets.
+	 El payload contiene los campos del briefing y no expone datos del PDF.
+- El status del evento y del snapshot usa el valor persistido (`analizando` al
+	 inicio), sin traducirlo a `analyzing`.
+- La elegibilidad se fija al aceptar la clasificación, no al subir el PDF:
+	 `accepted_at` y metadata se confirman antes del procesamiento del grafo. Los
+	 documentos rechazados no aparecen en SSE ni recuperación. `accepted_at` es
+	 el timestamp/cursor durable para stream y snapshot, incluso si la carga fue
+	 anterior a abrir el dashboard. Migración requerida:
+	 `services/api/migrations/20261112_rfp_sse_acceptance.sql`.
+- El backoffice usa fetch con bearer JWT, proxy Next.js sin buffering, keepalive
+	 de 15 s y reconexión exponencial (500 ms–30 s). Recupera por snapshot SQL de
+	 tickets aceptados desde la apertura de la página; solapamiento snapshot/SSE se
+	 deduplica por `ticket_id`. El SSE consulta SQL para funcionar con varios
+	 workers sin estado de proceso compartido.
+- Pruebas automatizadas cubren Content-Type SSE, nombre y forma de `data`,
+	 rechazo/aceptación y persistencia anterior al grafo; Jest cubre fetch con JWT,
+	 snapshot + evento duplicado y reconexión/backoff.
+- Coste actual documentado: conexión independiente por dashboard; 50 clientes
+	implican alrededor de 50 lecturas SQL/s más snapshots. Considerar notificación
+	compartida manteniendo SQL como recuperación al crecer.
+- Documentado diseño SSE vs WebSocket, prerrequisito de migración y prueba manual
+	 reproducible de caída, recuperación y ausencia de duplicados.
+- Validación focalizada: 23 tests backend RFP y 2 tests Jest de backoffice
+	 aprobados. `git diff --check` PASS. `npx tsc --noEmit` reporta referencias
+	 `.next` generadas a `app/chat/page.js` inexistente, ajenas a este cambio.
+- Rama `feature/sse-notifications`; diff basado en `main` tras integrar los PR
+	 anteriores de RFP.
+
 ## 2026-11-12 (RFP: garantia de persistencia de trazas y concurrencia)
 
 - Confirmado y probado que `services/rfp_approval_tasks.py::_trace_sink` vuelve a lanzar los errores de SQL al guardar `RfpNodeTrace`; las regresiones verifican tanto escritura como propagacion del fallo.
