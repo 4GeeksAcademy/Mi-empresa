@@ -153,15 +153,44 @@ class TelemetryEventRecord(SQLModel, table=True):
     )
 
 
+class Tenant(SQLModel, table=True):
+    """Company boundary for customer-owned resources."""
+
+    __tablename__ = "tenants"
+
+    tenant_id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), primary_key=True))
+    name: str = SQLField(max_length=200)
+    is_active: bool = SQLField(default=True, nullable=False)
+    created_at: datetime = SQLField(default_factory=utc_now)
+
+
+class TenantMembership(SQLModel, table=True):
+    """Server-managed, one-company membership for an authenticated account."""
+
+    __tablename__ = "tenant_memberships"
+
+    # The account store is TinyDB, so membership keeps its stable user ID as text.
+    user_id: str = SQLField(primary_key=True, max_length=64)
+    tenant_id: UUID = SQLField(foreign_key="tenants.tenant_id", index=True)
+    role: str = SQLField(max_length=32)
+    is_active: bool = SQLField(default=True, nullable=False)
+    created_at: datetime = SQLField(default_factory=utc_now)
+
+
 class RfpTicket(SQLModel, table=True):
     """Durable lifecycle record for an uploaded TrackFlow RFP."""
 
     __tablename__ = "rfp_tickets"
-    __table_args__ = (Index("ix_rfp_tickets_owner_created", "owner_id", "created_at"),)
+    __table_args__ = (
+        Index("ix_rfp_tickets_owner_created", "owner_id", "created_at"),
+        Index("ix_rfp_tickets_tenant_created", "tenant_id", "created_at"),
+    )
 
     ticket_id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), primary_key=True))
     rfp_id: UUID = SQLField(default_factory=uuid4, sa_column=Column(Uuid(as_uuid=True), unique=True, nullable=False))
     owner_id: str = SQLField(max_length=64)
+    # Nullable deliberately: pre-tenant/ambiguous records remain quarantined.
+    tenant_id: UUID | None = SQLField(default=None, foreign_key="tenants.tenant_id")
     original_filename: str = SQLField(max_length=255)
     raw_pdf_path: str = SQLField(sa_type=Text)
     markdown_path: str | None = SQLField(default=None, sa_type=Text)

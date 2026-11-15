@@ -17,7 +17,6 @@ class UserCreateInput(BaseModel):
 
     email: str = Field(min_length=5, max_length=255)
     password: str = Field(min_length=6, max_length=255)
-    role: UserRole = UserRole.USER
     # Opcionales para crear el perfil junto con el usuario
     name: str | None = None
     phone: str | None = None

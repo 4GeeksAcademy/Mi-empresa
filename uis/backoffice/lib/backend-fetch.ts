@@ -1,5 +1,9 @@
 export function backendFetch(request: Request, input: RequestInfo | URL, init: RequestInit = {}): Promise<Response> {
   const headers = new Headers(init.headers);
+  const authorization = request.headers.get("authorization");
+  if (authorization && !headers.has("authorization")) {
+    headers.set("authorization", authorization);
+  }
   for (const name of ["x-request-id", "x-session-id"]) {
     const value = request.headers.get(name);
     if (value) headers.set(name, value);

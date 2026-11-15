@@ -67,6 +67,18 @@ def test_user_input_normalizes_email_and_rejects_invalid_credentials() -> None:
         UserCreateInput(email="invalid-email", password="secure123")
     with pytest.raises(ValidationError):
         UserCreateInput(email="user@trackflow.com", password="12345")
+    with pytest.raises(ValidationError, match="role"):
+        UserCreateInput(email="user@trackflow.com", password="secure123", role="admin")
+
+
+def test_public_registration_always_creates_regular_user(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(users, "hash_password", lambda password: f"hashed:{password}")
+
+    created = users.create_user(
+        UserCreateInput(email="ordinary@trackflow.com", password="secure123")
+    )
+
+    assert created.role == UserRole.USER
 
 
 def test_admin_can_update_user_but_regular_user_cannot_change_role() -> None:
@@ -102,6 +114,16 @@ def test_list_and_get_user_return_existing_users_and_reject_missing_user() -> No
         users.get_user(999, current_user)
 
 
+def test_regular_user_cannot_read_another_user() -> None:
+    owner_id = _persist_user("owner@trackflow.com")
+    other_id = _persist_user("other@trackflow.com")
+
+    with pytest.raises(HTTPException) as raised:
+        users.get_user(other_id, {"id": owner_id, "role": UserRole.USER.value})
+
+    assert raised.value.status_code == 403
+
+
 def test_delete_user_removes_linked_profile_and_rejects_missing_user() -> None:
     user_id = _persist_user("remove@trackflow.com")
     get_profile_repository().create(ProfilePersistence(user_id=user_id, name="To remove"))
@@ -114,3 +136,14 @@ def test_delete_user_removes_linked_profile_and_rejects_missing_user() -> None:
     with pytest.raises(HTTPException, match="no encontrado") as raised:
         users.delete_user(user_id, admin)
     assert raised.value.status_code == 404
+
+
+def test_regular_user_cannot_delete_another_user() -> None:
+    owner_id = _persist_user("owner-delete@trackflow.com")
+    other_id = _persist_user("other-delete@trackflow.com")
+
+    with pytest.raises(HTTPException) as raised:
+        users.delete_user(other_id, {"id": owner_id, "role": UserRole.USER.value})
+
+    assert raised.value.status_code == 403
+    assert get_user_repository().get(other_id) is not None

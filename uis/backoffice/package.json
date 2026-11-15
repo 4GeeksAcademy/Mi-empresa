@@ -10,7 +10,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "next": "16.2.10",
+    "next": "^16.4.6",
     "react": "19.2.4",
     "react-dom": "19.2.4"
   },
@@ -21,7 +21,8 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "eslint": "^9",
-    "eslint-config-next": "16.2.10",
+    "eslint-config-next": "^16.4.6",
+    "handlebars": "^4.7.10",
     "jest": "^30.5.1",
     "jest-environment-jsdom": "^30.5.1",
     "tailwindcss": "^4",

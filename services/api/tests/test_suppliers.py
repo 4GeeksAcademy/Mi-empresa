@@ -82,9 +82,59 @@ def test_create_and_get_supplier() -> None:
     supplier_id = data["id"]
     assert data["nombre"] == "Proveedor Demo"
 
-    fetched = client.get(f"/suppliers/{supplier_id}")
+    fetched = client.get(f"/suppliers/{supplier_id}", headers=headers)
     assert fetched.status_code == 200
     assert fetched.json()["id"] == supplier_id
+
+
+def test_supplier_reads_and_mutations_require_staff_and_delete_requires_admin(
+    monkeypatch,
+) -> None:
+    # Reuse the isolated auth store configured by setup_function.
+    admin = _auth_header()
+    supplier = client.post("/suppliers", json=_seeded_supplier_payload(), headers=admin).json()
+
+    user = get_user_repository().create(
+        UserPersistence(
+            email="supplier-user@trackflow.com",
+            hashed_password=hash_password("supplier-test-password"),
+            role="user",
+            is_active=True,
+            created_at=utc_now_iso(),
+        )
+    )
+    user_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.id)})}"}
+
+    assert client.get("/suppliers", headers=user_headers).status_code == 403
+    assert client.get(f"/suppliers/{supplier['id']}", headers=user_headers).status_code == 403
+    assert client.patch(
+        f"/suppliers/{supplier['id']}/status",
+        json={"status": "suspendido"},
+        headers=user_headers,
+    ).status_code == 403
+
+    manager = get_user_repository().create(
+        UserPersistence(
+            email="supplier-manager@trackflow.com",
+            hashed_password=hash_password("supplier-test-password"),
+            role="manager",
+            is_active=True,
+            created_at=utc_now_iso(),
+        )
+    )
+    manager_headers = {"Authorization": f"Bearer {create_access_token(data={'sub': str(manager.id)})}"}
+    assert client.get("/suppliers", headers=manager_headers).status_code == 200
+    assert client.delete(f"/suppliers/{supplier['id']}", headers=manager_headers).status_code == 403
+    assert client.delete(f"/suppliers/{supplier['id']}", headers=admin).status_code == 200
+
+
+def test_supplier_access_rejects_anonymous_and_mcp_service(monkeypatch) -> None:
+    monkeypatch.setenv("TRACKFLOW_INTERNAL_SERVICE_TOKEN", "supplier-test-token")
+    assert client.get("/suppliers").status_code == 401
+    # The API only validates MCP identity on its explicitly allowlisted route dependencies.
+    assert client.get(
+        "/suppliers", headers={"X-TrackFlow-MCP-Token": "supplier-test-token"}
+    ).status_code == 401
 
 
 def test_invalid_payload_returns_422() -> None:
@@ -128,12 +178,12 @@ def test_list_filters_by_country_and_category() -> None:
         headers=headers,
     )
 
-    by_country = client.get("/suppliers", params={"pais": "ES"})
+    by_country = client.get("/suppliers", params={"pais": "ES"}, headers=headers)
     assert by_country.status_code == 200
     assert len(by_country.json()) == 1
     assert by_country.json()[0]["pais"] == "ES"
 
-    by_category = client.get("/suppliers", params={"categoria": "transporte"})
+    by_category = client.get("/suppliers", params={"categoria": "transporte"}, headers=headers)
     assert by_category.status_code == 200
     assert len(by_category.json()) == 1
     assert by_category.json()[0]["nombre"] == "Proveedor US"
@@ -155,7 +205,7 @@ def test_update_rate_and_status_and_delete() -> None:
     deleted = client.delete(f"/suppliers/{supplier_id}", headers=headers)
     assert deleted.status_code == 200
 
-    missing = client.get(f"/suppliers/{supplier_id}")
+    missing = client.get(f"/suppliers/{supplier_id}", headers=headers)
     assert missing.status_code == 404
 
 
@@ -209,12 +259,12 @@ def test_list_filters_by_country_and_category_aliases() -> None:
         headers=headers,
     )
 
-    by_country = client.get("/suppliers", params={"country": "ES"})
+    by_country = client.get("/suppliers", params={"country": "ES"}, headers=headers)
     assert by_country.status_code == 200
     assert len(by_country.json()) == 1
     assert by_country.json()[0]["pais"] == "ES"
 
-    by_category = client.get("/suppliers", params={"category": "almacenaje"})
+    by_category = client.get("/suppliers", params={"category": "almacenaje"}, headers=headers)
     assert by_category.status_code == 200
     assert len(by_category.json()) == 1
     assert by_category.json()[0]["nombre"] == "Aliased ES"

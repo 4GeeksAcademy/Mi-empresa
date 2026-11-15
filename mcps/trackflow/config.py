@@ -4,7 +4,7 @@ import os
 from typing import Self
 from urllib.parse import urlsplit
 
-from pydantic import Field, field_validator
+from pydantic import Field, SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from services.api.service_urls import validate_url
@@ -16,6 +16,7 @@ class ServerSettings(BaseSettings):
     issuer: str = Field(min_length=1)
     resource_url: str = Field(min_length=1)
     backend_url: str = "http://localhost:8000"
+    backend_token: SecretStr | None = None
     host: str = "127.0.0.1"
     port: int = Field(default=8001, ge=1, le=65535)
     allowed_origins: list[str] = Field(default_factory=list)

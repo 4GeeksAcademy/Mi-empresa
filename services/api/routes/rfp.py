@@ -19,7 +19,7 @@ from data.pipelines.rfp_intake.approval import (
     validate_decision,
 )
 from database import get_engine
-from models import DepartmentSectionRecord, RfpMetadataRecord, RfpTicket
+from models import DepartmentSectionRecord, RfpMetadataRecord, RfpTicket, Tenant, TenantMembership
 from services.rfp_approval_tasks import approval_snapshot
 from services.rfp_tasks import process_rfp_task
 from services.response_tasks import generate_rfp_response_task
@@ -31,6 +31,63 @@ RAW_RFP_DIR = Path(os.environ.get("RFP_RAW_DIR", "/app/data/raw/rfps"))
 APPROVAL_START_STATUSES = {"needs_human_review", "en_evaluación"}
 APPROVAL_STATUS = "esperando_aprobación"
 TERMINATED_STATUS = "terminado"
+TENANT_ROLES = {"tenant_admin", "tenant_member"}
+
+
+def _tenant_context(session: Session, current_user: dict) -> tuple[UUID, str]:
+    """Load active company membership from persistence; never accept it from a request."""
+    membership = session.get(TenantMembership, str(current_user.get("id")))
+    if membership is None or not membership.is_active or membership.role not in TENANT_ROLES:
+        raise HTTPException(status_code=403, detail="No tienes una membresía de empresa activa.")
+    tenant = session.get(Tenant, membership.tenant_id)
+    if tenant is None or not tenant.is_active:
+        raise HTTPException(status_code=403, detail="La empresa no está activa.")
+    return membership.tenant_id, membership.role
+
+
+def _can_access_ticket(session: Session, ticket: RfpTicket, current_user: dict) -> bool:
+    # Platform RFP access remains global by explicit product decision.
+    if current_user.get("role") in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+        return True
+    membership = session.get(TenantMembership, str(current_user.get("id")))
+    tenant = session.get(Tenant, membership.tenant_id) if membership is not None else None
+    return bool(
+        membership
+        and membership.is_active
+        and membership.role in TENANT_ROLES
+        and tenant is not None
+        and tenant.is_active
+        and ticket.tenant_id is not None
+        and membership.tenant_id == ticket.tenant_id
+    )
+
+
+def _tenant_for_upload(session: Session, current_user: dict) -> UUID | None:
+    if current_user.get("role") in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+        # Platform uploads remain unassigned/quarantined unless explicitly
+        # classified later; a platform role is not a tenant membership.
+        return None
+    tenant_id, role = _tenant_context(session, current_user)
+    if role != "tenant_admin":
+        raise HTTPException(status_code=403, detail="Se requiere rol tenant_admin para modificar RFP.")
+    return tenant_id
+
+
+def _authorize_ticket_write(session: Session, ticket: RfpTicket, current_user: dict) -> None:
+    if current_user.get("role") in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+        # Preserve existing owner-scoped mutation behavior for platform roles;
+        # the explicit global platform read privilege does not grant new writes.
+        if ticket.owner_id != str(current_user.get("id")):
+            raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        return
+    tenant_id, role = _tenant_context(session, current_user)
+    if role != "tenant_admin":
+        raise HTTPException(status_code=403, detail="Se requiere rol tenant_admin para modificar RFP.")
+    tenant = session.get(Tenant, tenant_id)
+    if tenant is None or not tenant.is_active:
+        raise HTTPException(status_code=403, detail="La empresa no está activa.")
+    if ticket.tenant_id is None or ticket.tenant_id != tenant_id:
+        raise HTTPException(status_code=404, detail="Ticket no encontrado.")
 
 
 def enqueue_rfp(ticket_id: str) -> None:
@@ -147,14 +204,15 @@ def list_rfp_tickets(
     created_after: datetime | None = Query(default=None),
     current_user: dict = Depends(get_current_user),
 ) -> list[dict]:
-    """Return snapshots for staff or owned snapshots for regular users."""
+    """Return all snapshots to platform staff, or the active tenant's snapshots."""
     with Session(get_engine()) as session:
         statement = select(RfpTicket).where(
             RfpTicket.classification_result.is_(True),
             RfpTicket.accepted_at.is_not(None),
         )
         if current_user.get("role") not in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
-            statement = statement.where(RfpTicket.owner_id == str(current_user["id"]))
+            tenant_id, _ = _tenant_context(session, current_user)
+            statement = statement.where(RfpTicket.tenant_id == tenant_id)
         if created_after is not None:
             statement = statement.where(RfpTicket.accepted_at >= created_after)
         tickets = session.exec(statement.order_by(RfpTicket.accepted_at.desc())).all()
@@ -177,6 +235,8 @@ def list_rfp_tickets(
 
 @router.post("", status_code=202)
 async def upload_rfp(file: UploadFile = File(...), current_user: dict = Depends(get_current_user)) -> dict[str, str]:
+    with Session(get_engine()) as session:
+        tenant_id = _tenant_for_upload(session, current_user)
     filename = Path(file.filename or "").name
     if not filename.lower().endswith(".pdf") or file.content_type not in {"application/pdf", "application/octet-stream", None}:
         raise HTTPException(status_code=400, detail="Adjunta un documento PDF.")
@@ -199,7 +259,7 @@ async def upload_rfp(file: UploadFile = File(...), current_user: dict = Depends(
         path.unlink(missing_ok=True)
         raise
     with Session(get_engine()) as session:
-        ticket = RfpTicket(ticket_id=ticket_id, rfp_id=rfp_id, owner_id=owner_id,
+        ticket = RfpTicket(ticket_id=ticket_id, rfp_id=rfp_id, owner_id=owner_id, tenant_id=tenant_id,
                            original_filename=safe_name, raw_pdf_path=str(path), status="analizando")
         session.add(ticket)
         session.commit()
@@ -221,7 +281,7 @@ async def upload_rfp(file: UploadFile = File(...), current_user: dict = Depends(
 def get_rfp_ticket(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
         metadata = session.get(RfpMetadataRecord, ticket_id)
         sections = session.exec(select(DepartmentSectionRecord).where(DepartmentSectionRecord.ticket_id == ticket_id)).all()
@@ -233,7 +293,7 @@ def get_rfp_analysis(ticket_id: UUID, current_user: dict = Depends(get_current_u
     """Expose the synthesizer's Part 2 handoff for downstream orchestration."""
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
         if ticket.status == "analizando":
             raise HTTPException(status_code=409, detail="El análisis todavía está en curso.")
@@ -250,8 +310,9 @@ def start_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current
     """Handoff Parte 1 → Parte 2: solo se lanza desde `analisis_completo`."""
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        _authorize_ticket_write(session, ticket, current_user)
         if ticket.status != "analisis_completo":
             raise HTTPException(status_code=409,
                                 detail=f"El ticket está en estado {ticket.status}; "
@@ -285,7 +346,7 @@ def get_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current_u
     """Handoff Parte 2 → Parte 3: borradores + EvaluationResult por departamento."""
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
         sections = session.exec(select(DepartmentSectionRecord).where(
             DepartmentSectionRecord.ticket_id == ticket_id)).all()
@@ -311,11 +372,13 @@ def get_rfp_response(ticket_id: UUID, current_user: dict = Depends(get_current_u
 # --------------------------------------------------------------------------
 # Parte 3: aprobación humana y cierre del documento
 # --------------------------------------------------------------------------
-def _owned_ticket(ticket_id: UUID, current_user: dict) -> RfpTicket:
+def _authorized_ticket(ticket_id: UUID, current_user: dict, *, write: bool = False) -> RfpTicket:
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        if write:
+            _authorize_ticket_write(session, ticket, current_user)
         return ticket
 
 
@@ -325,8 +388,9 @@ def start_rfp_approvals(ticket_id: UUID, current_user: dict = Depends(get_curren
     previous_status: str
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
+        _authorize_ticket_write(session, ticket, current_user)
         if ticket.status == APPROVAL_STATUS:
             raise HTTPException(status_code=409, detail="Las aprobaciones ya están en curso.")
         if ticket.status == TERMINATED_STATUS:
@@ -367,7 +431,7 @@ def start_rfp_approvals(ticket_id: UUID, current_user: dict = Depends(get_curren
 @router.get("/{ticket_id}/approvals")
 def get_rfp_approvals(ticket_id: UUID, current_user: dict = Depends(get_current_user)) -> dict:
     """Snapshot mínimo por responsable: sección, evaluación, flags e interrupt."""
-    _owned_ticket(ticket_id, current_user)
+    _authorized_ticket(ticket_id, current_user)
     snapshot = approval_snapshot(ticket_id)
     if snapshot is None:
         raise HTTPException(status_code=404, detail="Las aprobaciones aún no han arrancado.")
@@ -383,7 +447,7 @@ def record_rfp_decision(ticket_id: UUID, department: str, payload: dict,
     fijo del briefing y comentario obligatorio) y el `Command(resume=...)` viven
     en services/rfp_approval_tasks + data/pipelines/rfp_intake/approval.
     """
-    ticket = _owned_ticket(ticket_id, current_user)
+    ticket = _authorized_ticket(ticket_id, current_user, write=True)
     if ticket.status != APPROVAL_STATUS:
         raise HTTPException(status_code=409,
                             detail="No hay un ciclo de aprobación activo para este ticket.")
@@ -412,7 +476,7 @@ def get_rfp_final_document(ticket_id: UUID, current_user: dict = Depends(get_cur
     """Documento final consolidado: solo existe con todas las secciones aprobadas."""
     with Session(get_engine()) as session:
         ticket = session.get(RfpTicket, ticket_id)
-        if ticket is None or ticket.owner_id != str(current_user["id"]):
+        if ticket is None or not _can_access_ticket(session, ticket, current_user):
             raise HTTPException(status_code=404, detail="Ticket no encontrado.")
         if ticket.status != TERMINATED_STATUS or not ticket.final_document:
             raise HTTPException(status_code=409,

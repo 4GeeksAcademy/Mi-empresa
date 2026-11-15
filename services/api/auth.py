@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
+import hmac
+import re
 from typing import Any
 
 from dotenv import load_dotenv
-from fastapi import Depends, HTTPException, status
-from fastapi.security import OAuth2PasswordBearer
+from fastapi import Depends, Header, HTTPException, Request, status
+from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer, OAuth2PasswordBearer
 from jose import JWTError, jwt
 from jose.exceptions import ExpiredSignatureError
 from passlib.hash import bcrypt
@@ -104,3 +106,71 @@ async def get_current_admin(current_user: dict[str, Any] = Depends(get_current_u
             detail="Se requiere rol admin para esta operacion.",
         )
     return current_user
+
+
+async def get_current_staff(
+    current_user: dict[str, Any] = Depends(get_current_user),
+) -> dict[str, Any]:
+    """Allow operational staff roles; ordinary self-registered users are excluded."""
+    if current_user.get("role") not in {UserRole.ADMIN.value, UserRole.MANAGER.value}:
+        state = context.get() or {}
+        emit(
+            "unauthorized_access_rejected",
+            {"route": state.get("route", "/unknown"), "http_status": 403, "required_role": "manager_or_admin"},
+            str(current_user["id"]),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere rol manager o admin para esta operacion.",
+        )
+    return current_user
+
+
+_optional_bearer = HTTPBearer(auto_error=False)
+
+
+async def get_optional_current_user(
+    credentials: HTTPAuthorizationCredentials | None = Depends(_optional_bearer),
+) -> dict[str, Any] | None:
+    if credentials is None:
+        return None
+    try:
+        return authenticate_access_token(credentials.credentials)
+    except HTTPException:
+        # A malformed bearer must never fall back to the service-token identity.
+        raise
+
+
+async def get_current_staff_or_mcp(
+    request: Request,
+    current_user: dict[str, Any] | None = Depends(get_optional_current_user),
+    mcp_token: str | None = Header(default=None, alias="X-TrackFlow-MCP-Token"),
+) -> dict[str, Any]:
+    """Allow staff JWTs or the dedicated, narrowly deployed MCP service token."""
+    if current_user is not None:
+        return await get_current_staff(current_user)
+
+    expected_token = os.environ.get("TRACKFLOW_INTERNAL_SERVICE_TOKEN")
+    mcp_route_allowed = (
+        request.method == "GET"
+        and (
+            request.url.path in {"/api/incidents", "/inventory/products"}
+            or bool(re.fullmatch(r"/api/incidents/\d+|/inventory/products/\d+", request.url.path))
+        )
+    ) or (request.method == "POST" and request.url.path == "/api/incidents") or (
+        request.method == "PATCH"
+        and bool(re.fullmatch(r"/api/incidents/\d+/status", request.url.path))
+    )
+    if (
+        mcp_route_allowed
+        and expected_token
+        and mcp_token
+        and hmac.compare_digest(mcp_token, expected_token)
+    ):
+        return {"id": "mcp-service", "role": "service", "service_token": mcp_token}
+
+    raise HTTPException(
+        status_code=status.HTTP_401_UNAUTHORIZED,
+        detail="Se requieren credenciales de personal o del servicio MCP.",
+        headers={"WWW-Authenticate": "Bearer"},
+    )

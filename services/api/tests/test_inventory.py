@@ -32,6 +32,23 @@ def _auth_header() -> dict[str, str]:
     return {"Authorization": f"Bearer {token}"}
 
 
+def _role_auth_header(role: str) -> dict[str, str]:
+    email = f"inventory-{role}@trackflow.com"
+    repository = get_user_repository()
+    user = repository.get_by_email(email)
+    if user is None:
+        user = repository.create(
+            UserPersistence(
+                email=email,
+                hashed_password=hash_password("inventory-test-password"),
+                role=role,
+                is_active=True,
+                created_at=utc_now_iso(),
+            )
+        )
+    return {"Authorization": f"Bearer {create_access_token(data={'sub': str(user.id)})}"}
+
+
 @pytest.fixture
 def inventory_client(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> Iterator[TestClient]:
     monkeypatch.setenv("DATABASE_URL", f"sqlite:///{tmp_path / 'lifespan.db'}")
@@ -87,7 +104,7 @@ def test_inventory_products_and_stock_movements(inventory_client: TestClient) ->
     assert outbound.status_code == 201
     assert outbound.json()["direction"] == "outbound"
 
-    detail = inventory_client.get(f"/inventory/products/{product['id']}")
+    detail = inventory_client.get(f"/inventory/products/{product['id']}", headers=headers)
     assert detail.status_code == 200
     assert detail.json()["current_stock"] == 6
 
@@ -130,11 +147,11 @@ def test_inventory_lists_products_and_returns_not_found_for_unknown_product(
     assert created.status_code == 201
     product = created.json()
 
-    products = inventory_client.get("/inventory/products")
+    products = inventory_client.get("/inventory/products", headers=headers)
     assert products.status_code == 200
     assert products.json() == [product]
 
-    missing = inventory_client.get("/inventory/products/999999")
+    missing = inventory_client.get("/inventory/products/999999", headers=headers)
     assert missing.status_code == 404
     assert missing.json()["detail"] == "Producto no encontrado."
 
@@ -175,7 +192,7 @@ def test_inventory_rejects_duplicate_partition_and_insufficient_stock(
     )
     assert rejected.status_code == 400
 
-    orders = inventory_client.get("/inventory/orders")
+    orders = inventory_client.get("/inventory/orders", headers=headers)
     assert orders.status_code == 200
     assert len(orders.json()) == 1
 
@@ -257,9 +274,11 @@ def test_inventory_allows_exact_stock_outbound_and_lists_orders_in_creation_orde
     )
     assert inbound.status_code == 201
     assert outbound.status_code == 201
-    assert inventory_client.get(f"/inventory/products/{product['id']}").json()["current_stock"] == 0
+    assert inventory_client.get(
+        f"/inventory/products/{product['id']}", headers=headers
+    ).json()["current_stock"] == 0
 
-    orders = inventory_client.get("/inventory/orders")
+    orders = inventory_client.get("/inventory/orders", headers=headers)
     assert orders.status_code == 200
     order_rows = orders.json()
     assert [row["direction"] for row in order_rows] == ["inbound", "outbound"]
@@ -293,3 +312,41 @@ def test_inventory_requires_authentication_to_create_product(
         },
     )
     assert response.status_code == 401
+
+
+def test_inventory_requires_staff_and_allows_mcp_read_only(
+    inventory_client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    user_headers = _role_auth_header("user")
+    assert inventory_client.get("/inventory/products", headers=user_headers).status_code == 403
+    assert inventory_client.post(
+        "/inventory/products",
+        json={"name": "Denied", "sku": "DENIED", "warehouse": "zaragoza"},
+        headers=user_headers,
+    ).status_code == 403
+
+    monkeypatch.setenv("TRACKFLOW_INTERNAL_SERVICE_TOKEN", "test-internal-token")
+    service_headers = {"X-TrackFlow-MCP-Token": "test-internal-token"}
+    assert inventory_client.get("/inventory/products", headers=service_headers).status_code == 200
+    assert inventory_client.get("/inventory/orders", headers=service_headers).status_code == 401
+    assert inventory_client.post(
+        "/inventory/products",
+        json={"name": "Denied MCP", "sku": "DENIED-MCP", "warehouse": "zaragoza"},
+        headers=service_headers,
+    ).status_code == 401
+
+
+def test_incident_routes_require_staff_or_mcp_allowlisted_operation(
+    inventory_client: TestClient, monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assert inventory_client.get("/api/incidents").status_code == 401
+
+    user_headers = _role_auth_header("user")
+    assert inventory_client.get("/api/incidents", headers=user_headers).status_code == 403
+    assert inventory_client.get("/api/incidents/summary", headers=user_headers).status_code == 403
+
+    monkeypatch.setenv("TRACKFLOW_INTERNAL_SERVICE_TOKEN", "test-internal-token")
+    service_headers = {"X-TrackFlow-MCP-Token": "test-internal-token"}
+    assert inventory_client.get("/api/incidents", headers=service_headers).status_code == 200
+    # MCP cannot use staff-only summary or inventory order routes.
+    assert inventory_client.get("/api/incidents/summary", headers=service_headers).status_code == 401

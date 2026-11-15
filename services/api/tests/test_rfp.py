@@ -12,7 +12,7 @@ from sqlmodel import SQLModel, Session, create_engine, select
 from auth import get_current_user
 from database import get_engine
 from main import app
-from models import RfpMetadataRecord, RfpNodeTrace, RfpTicket
+from models import RfpMetadataRecord, RfpNodeTrace, RfpTicket, Tenant, TenantMembership
 from services.rfp_approval_tasks import approval_snapshot
 from services.rfp_tasks import process_rfp_task
 
@@ -21,12 +21,17 @@ from services.rfp_tasks import process_rfp_task
 def rfp_client(tmp_path, monkeypatch):
     engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
     SQLModel.metadata.create_all(engine)
+    default_tenant_id = UUID("00000000-0000-0000-0000-000000000042")
+    with Session(engine) as session:
+        session.add(Tenant(tenant_id=default_tenant_id, name="Tenant 42"))
+        session.add(TenantMembership(user_id="42", tenant_id=default_tenant_id, role="tenant_admin"))
+        session.commit()
     monkeypatch.setattr("routes.rfp.get_engine", lambda: engine)
     monkeypatch.setattr("services.rfp_tasks.get_engine", lambda: engine)
     monkeypatch.setattr("routes.rfp.RAW_RFP_DIR", tmp_path / "raw")
     monkeypatch.setattr("services.rfp_tasks.RAW_RFP_DIR", tmp_path / "raw")
     monkeypatch.setattr("main.init_inventory_db", lambda: None)
-    app.dependency_overrides[get_current_user] = lambda: {"id": 42}
+    app.dependency_overrides[get_current_user] = lambda: {"id": 42, "role": "user"}
     client = TestClient(app, raise_server_exceptions=False)
     yield client, engine, tmp_path
     client.close()
@@ -164,7 +169,77 @@ def test_backoffice_user_receives_another_users_accepted_rfp(rfp_client, monkeyp
     ).json()] == [created["ticket_id"]]
 
     app.dependency_overrides[get_current_user] = lambda: {"id": 7}
-    assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).json() == []
+    assert client.get("/api/rfps", params={"created_after": "2000-01-01T00:00:00Z"}).status_code == 403
+
+
+def test_tenant_members_are_scoped_to_persisted_membership_and_platform_stays_global(
+        rfp_client, monkeypatch):
+    client, engine, _ = rfp_client
+    import routes.rfp as rfp_route
+
+    monkeypatch.setattr(rfp_route, "enqueue_rfp", lambda _ticket_id: None)
+    tenant_a_ticket = client.post(
+        "/api/rfps", files={"file": ("a.pdf", b"pdf", "application/pdf")}
+    ).json()
+
+    tenant_b_id = UUID("00000000-0000-0000-0000-000000000099")
+    with Session(engine) as session:
+        session.add(Tenant(tenant_id=tenant_b_id, name="Tenant 99"))
+        session.add(TenantMembership(user_id="99", tenant_id=tenant_b_id, role="tenant_admin"))
+        ticket_a = session.get(RfpTicket, UUID(tenant_a_ticket["ticket_id"]))
+        ticket_a.classification_result = True
+        ticket_a.accepted_at = datetime.now(timezone.utc)
+        ticket_b = RfpTicket(
+            owner_id="99", tenant_id=tenant_b_id, original_filename="b.pdf",
+            raw_pdf_path="/tmp/b.pdf", classification_result=True,
+            accepted_at=datetime.now(timezone.utc),
+        )
+        legacy = RfpTicket(
+            owner_id="77", tenant_id=None, original_filename="legacy.pdf",
+            raw_pdf_path="/tmp/legacy.pdf", classification_result=True,
+            accepted_at=datetime.now(timezone.utc),
+        )
+        session.add(ticket_b)
+        session.add(legacy)
+        session.commit()
+        tenant_b_ticket_id = ticket_b.ticket_id
+        legacy_ticket_id = legacy.ticket_id
+
+    # Sending an arbitrary tenant_id cannot change the tenant resolved from
+    # the persisted membership for the authenticated user.
+    own_list = client.get("/api/rfps", params={"tenant_id": str(tenant_b_id)})
+    assert own_list.status_code == 200
+    assert [item["ticket_id"] for item in own_list.json()] == [tenant_a_ticket["ticket_id"]]
+    assert client.get(f"/api/rfps/{tenant_b_ticket_id}").status_code == 404
+    assert client.get(f"/api/rfps/{legacy_ticket_id}").status_code == 404
+
+    app.dependency_overrides[get_current_user] = lambda: {"id": 99, "role": "user"}
+    assert [item["ticket_id"] for item in client.get("/api/rfps").json()] == [str(tenant_b_ticket_id)]
+    assert client.get(f"/api/rfps/{tenant_a_ticket['ticket_id']}").status_code == 404
+
+    # Platform admin/manager retains the explicitly approved global RFP view,
+    # including records that have not yet been classified into a tenant.
+    app.dependency_overrides[get_current_user] = lambda: {"id": 100, "role": "manager"}
+    platform_ids = {item["ticket_id"] for item in client.get("/api/rfps").json()}
+    assert platform_ids == {
+        tenant_a_ticket["ticket_id"], str(tenant_b_ticket_id), str(legacy_ticket_id)
+    }
+
+
+def test_tenant_member_is_read_only_and_missing_membership_fails_closed(rfp_client):
+    client, engine, _ = rfp_client
+    with Session(engine) as session:
+        membership = session.get(TenantMembership, "42")
+        membership.role = "tenant_member"
+        session.add(membership)
+        session.commit()
+
+    upload = client.post("/api/rfps", files={"file": ("member.pdf", b"pdf", "application/pdf")})
+    assert upload.status_code == 403
+
+    app.dependency_overrides[get_current_user] = lambda: {"id": 404, "role": "user"}
+    assert client.get("/api/rfps").status_code == 403
+    assert client.post("/api/rfps", files={"file": ("none.pdf", b"pdf", "application/pdf")}).status_code == 403
 
 
 def test_rejected_document_is_not_recoverable_as_new_rfp(rfp_client, monkeypatch):
@@ -240,6 +315,8 @@ def test_migration_runner_includes_sse_acceptance_migration():
     assert "20261112_rfp_sse_acceptance.sql" in MIGRATIONS
     assert MIGRATIONS.index("20261024_rfp_intake.sql") < MIGRATIONS.index("20261112_rfp_sse_acceptance.sql")
     assert MIGRATIONS.index("20261110_rfp_response_generation.sql") < MIGRATIONS.index("20261112_rfp_sse_acceptance.sql")
+    assert "20261115_tenant_rfp_isolation.sql" in MIGRATIONS
+    assert MIGRATIONS.index("20261112_rfp_sse_acceptance.sql") < MIGRATIONS.index("20261115_tenant_rfp_isolation.sql")
 
 
 def test_worker_persists_metadata_workstreams_and_handoff(rfp_client, monkeypatch):

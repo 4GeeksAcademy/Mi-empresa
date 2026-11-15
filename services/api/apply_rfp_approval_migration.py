@@ -9,6 +9,7 @@ MIGRATIONS = (
     "20261024_rfp_intake.sql",
     "20261110_rfp_response_generation.sql",
     "20261112_rfp_sse_acceptance.sql",
+    "20261115_tenant_rfp_isolation.sql",
     "20261201_rfp_approval.sql",
 )
 

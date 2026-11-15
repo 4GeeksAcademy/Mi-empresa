@@ -2,6 +2,27 @@
 
 Servicio backend para analizar ficheros CSV de incidencias y exportar metricas.
 
+## Puertos de desarrollo
+
+El `docker-compose.yml` de desarrollo publica frontend y API en loopback; Redis
+y Qdrant también se enlazan solo a `127.0.0.1` para herramientas locales. No
+publiques Redis, Qdrant ni la API directamente en una interfaz pública en
+producción: usa la frontera de red/proxy aprobada. Flower está desactivado por
+defecto; para desarrollo local puede iniciarse con `--profile flower` tras
+provisionar `FLOWER_BASIC_AUTH` fuera del repositorio. Nunca restaures
+`FLOWER_UNAUTHENTICATED_API=true`.
+
+## CORS
+
+La API acepta por defecto solo los origins locales `http://localhost:3000` y
+`http://localhost:3001` para desarrollo. En cualquier despliegue configura
+`TRACKFLOW_CORS_ALLOWED_ORIGINS` como lista separada por comas de origins exactos,
+por ejemplo `https://www.example.com,https://ops.example.com` (sin rutas; un
+`/` final se normaliza). La configuración rechaza wildcard y origins con path. La API usa bearer
+tokens, no cookies de navegador, por lo que CORS no permite credentials. No
+configures el dominio real hasta confirmarlo con la persona responsable del
+despliegue.
+
 ## Flujo agentico de RFP (Hito 9, Parte 3)
 
 - Con Docker Compose, `backend` y `worker` esperan a que el servicio

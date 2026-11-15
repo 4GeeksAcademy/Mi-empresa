@@ -40,11 +40,22 @@ def test_success_preserves_export_and_is_idempotent(task_data):
     result = analyze_incidents_task.apply(args=[task_id], task_id=task_id)
     assert result.successful(), str(result.result)
     assert result.result["summary"]["total_processed"] == 1
-    assert b"total_processed,1" in task_store.latest_export()
+    assert b"total_processed,1" in task_store.latest_export("21")
     task_store.task_path(task_id, "csv").unlink()
     repeated = analyze_incidents_task.apply(args=[task_id], task_id=task_id)
     assert repeated.result == result.result
     assert task_store.get_failure(task_id) is None
+
+
+def test_latest_export_only_returns_the_requested_owner_export(task_data):
+    own_id = upload(b"own,csv\n")
+    foreign_id = str(uuid4())
+    task_store.create_upload(foreign_id, "other", "foreign.csv", io.BytesIO(b"foreign,csv\n"))
+    task_store.complete_job(own_id, {"summary": {}}, b"owner,21\n")
+    task_store.complete_job(foreign_id, {"summary": {}}, b"owner,other\n")
+
+    assert task_store.latest_export("21") == b"owner,21\n"
+    assert task_store.latest_export("missing") is None
 
 
 def test_three_failures_retry_with_backoff_then_persist_dlq(task_data, monkeypatch):
@@ -73,6 +84,24 @@ def test_empty_upload_is_not_registered(task_data):
     assert list(task_data.iterdir()) == []
 
 
+def test_upload_limit_accepts_exact_boundary_and_rejects_one_byte_over(task_data):
+    at_limit = str(uuid4())
+    contents = b"x" * task_store.MAX_UPLOAD_BYTES
+    task_store.create_upload(at_limit, "21", "boundary.csv", io.BytesIO(contents))
+    assert task_store.task_path(at_limit, "csv").stat().st_size == task_store.MAX_UPLOAD_BYTES
+
+    over_limit = str(uuid4())
+    with pytest.raises(task_store.UploadTooLargeError):
+        task_store.create_upload(
+            over_limit,
+            "21",
+            "oversized.csv",
+            io.BytesIO(contents + b"x"),
+        )
+    assert not task_store.task_path(over_limit, "csv").exists()
+    assert task_store.get_job(over_limit) is None
+
+
 @pytest.fixture
 def task_client(task_data):
     from fastapi.testclient import TestClient
@@ -99,6 +128,17 @@ def test_post_only_enqueues_identifier_under_200ms(task_client, monkeypatch):
     assert response.json() == {"task_id": task_id}
     assert published == [{"args": [task_id], "task_id": task_id}]
     assert task_store.task_path(task_id, "csv").read_bytes() == b"large,csv\n1,2\n"
+
+
+def test_analyze_rejects_upload_over_limit_with_413_and_no_task(task_client, task_data):
+    response = task_client.post(
+        "/api/incidents/analyze",
+        files={"file": ("oversized.csv", b"x" * (task_store.MAX_UPLOAD_BYTES + 1))},
+    )
+
+    assert response.status_code == 413
+    assert "10485760" in response.json()["detail"]
+    assert list(task_data.iterdir()) == []
 
 
 @pytest.mark.parametrize("state, expected", [
@@ -137,6 +177,23 @@ def test_export_and_terminal_status_survive_backend_expiration(task_client):
     task_store.record_failure(failed_id, 3, "private failure")
     failure = task_client.get(f"/tasks/{failed_id}")
     assert failure.json() == {"task_id": failed_id, "status": "failure", "result": None}
+
+
+def test_export_is_scoped_to_authenticated_owner(task_client):
+    own_id = upload(b"own,csv\n")
+    task_store.complete_job(own_id, {"summary": {"total_processed": 1}}, b"owner,21\n")
+    foreign_id = str(uuid4())
+    task_store.create_upload(foreign_id, "other", "foreign.csv", io.BytesIO(b"foreign,csv\n"))
+    task_store.complete_job(foreign_id, {"summary": {"total_processed": 1}}, b"owner,other\n")
+
+    response = task_client.get("/api/incidents/results/export")
+
+    assert response.status_code == 200
+    assert response.content == b"owner,21\n"
+
+    with task_store.connection() as database:
+        database.execute("UPDATE tasks SET owner = 'other' WHERE task_id = ?", (own_id,))
+    assert task_client.get("/api/incidents/results/export").status_code == 404
 
 
 def test_broker_failure_returns_503_and_retains_input(task_client, monkeypatch):
