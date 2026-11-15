@@ -19,3 +19,10 @@ peticiones internas; no deben configurarse URLs `localhost` entre contenedores.
 El build usa contexto raiz para incluir el contrato compartido de telemetria;
 desarrollo lo monta readonly en `/docs/telemetry`. El backoffice usa un proxy
 same-origin para enviar lotes.
+
+Los puertos de desarrollo publicados por Compose se enlazan a `127.0.0.1` por
+defecto; los servicios internos Redis/Qdrant no deben exponerse directamente en
+producción. Flower no arranca con `docker compose up`: es opt-in mediante el
+perfil `flower`, requiere `FLOWER_BASIC_AUTH` provisionado fuera del repositorio
+y también queda enlazado a loopback. Para acceso operativo remoto, usar un proxy
+autenticado/TLS aprobado; no ampliar el binding del host como sustituto.

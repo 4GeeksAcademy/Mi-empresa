@@ -4,11 +4,13 @@ import asyncio
 import io
 import json
 import logging
+import os
 import time
 from collections.abc import AsyncIterator
 from contextlib import ExitStack, asynccontextmanager
 from typing import Literal
 from uuid import UUID, uuid4
+from urllib.parse import urlsplit
 
 from fastapi import Depends, FastAPI, File, HTTPException, Request, UploadFile
 from fastapi import WebSocket, WebSocketDisconnect
@@ -78,6 +80,46 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)
 
 
+def _cors_allowed_origins() -> list[str]:
+    """Load exact browser origins; localhost defaults are for local development only."""
+    configured = os.environ.get("TRACKFLOW_CORS_ALLOWED_ORIGINS")
+    origins = (
+        [origin.strip() for origin in configured.split(",") if origin.strip()]
+        if configured is not None
+        else ["http://localhost:3000", "http://localhost:3001"]
+    )
+    for origin in origins:
+        parsed = urlsplit(origin)
+        if origin.endswith("/") and parsed.path == "/":
+            origin = origin[:-1]
+            parsed = urlsplit(origin)
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ValueError(
+                "TRACKFLOW_CORS_ALLOWED_ORIGINS must contain valid exact origins."
+            ) from exc
+        if (
+            origin == "*"
+            or parsed.scheme not in {"http", "https"}
+            or not parsed.netloc
+            or not parsed.hostname
+            or parsed.username is not None
+            or parsed.password is not None
+            or (port is not None and not 1 <= port <= 65535)
+            or any(character.isspace() for character in origin)
+            or parsed.path
+            or parsed.query
+            or parsed.fragment
+            or origin != f"{parsed.scheme}://{parsed.netloc}"
+        ):
+            raise ValueError(
+                "TRACKFLOW_CORS_ALLOWED_ORIGINS must contain exact http(s) origins "
+                "without paths, wildcards, or trailing slashes."
+            )
+    return origins
+
+
 @app.middleware("http")
 async def timing_middleware(request: Request, call_next):
     started = time.perf_counter()
@@ -131,13 +173,18 @@ async def telemetry_http_exception_handler(
         )
     return await http_exception_handler(request, exc)
 
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=["*"],
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+def _configure_cors(application: FastAPI) -> None:
+    application.add_middleware(
+        CORSMiddleware,
+        allow_origins=_cors_allowed_origins(),
+        # API authentication uses Authorization bearer tokens, not browser cookies.
+        allow_credentials=False,
+        allow_methods=["GET", "POST", "PATCH", "DELETE", "OPTIONS"],
+        allow_headers=["Authorization", "Content-Type"],
+    )
+
+
+_configure_cors(app)
 app.add_middleware(TelemetryMiddleware, exception_handler=unhandled_exception_handler)
 
 
@@ -279,6 +326,8 @@ def analyze_incidents(
     task_id = str(uuid4())
     try:
         task_store.create_upload(task_id, str(current_user["id"]), file.filename, file.file)
+    except task_store.UploadTooLargeError as exc:
+        raise HTTPException(status_code=413, detail=str(exc)) from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     try:
@@ -323,7 +372,7 @@ def task_status(
 def export_last_result(
     current_user: dict = Depends(get_current_user),
 ) -> StreamingResponse:
-    export = task_store.latest_export()
+    export = task_store.latest_export(str(current_user["id"]))
     if export is None:
         raise HTTPException(
             status_code=404,

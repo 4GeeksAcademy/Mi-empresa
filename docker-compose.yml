@@ -11,8 +11,8 @@ services:
       INCIDENTS_API_INTERNAL_URL: ${INCIDENTS_API_INTERNAL_URL:-http://backend:8000}
       TELEMETRY_ENDPOINT: http://backend:8000/telemetry/events
     ports:
-      - "${WEBSITE_PORT:-3000}:3000"
-      - "${BACKOFFICE_PORT:-3001}:3001"
+      - "127.0.0.1:${WEBSITE_PORT:-3000}:3000"
+      - "127.0.0.1:${BACKOFFICE_PORT:-3001}:3001"
     volumes:
       - ./uis:/app
       - ./src:/src:ro
@@ -38,8 +38,9 @@ services:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
       QDRANT_URL: ${QDRANT_DOCKER_URL:-http://qdrant:6333}
       TASK_DATA_DIR: /var/lib/trackflow/tasks
+      TRACKFLOW_INTERNAL_SERVICE_TOKEN: ${TRACKFLOW_INTERNAL_SERVICE_TOKEN:?Set TRACKFLOW_INTERNAL_SERVICE_TOKEN in the deployment environment}
     ports:
-      - "${BACKEND_PORT:-8000}:8000"
+      - "127.0.0.1:${BACKEND_PORT:-8000}:8000"
     volumes:
       - ./services:/app/services
       - ./packages:/app/packages:ro
@@ -78,7 +79,7 @@ services:
     image: redis:7.4-alpine
     command: ["redis-server", "--appendonly", "yes", "--appendfsync", "always", "--maxmemory-policy", "noeviction"]
     ports:
-      - "6379:6379"
+      - "127.0.0.1:${REDIS_PORT:-6379}:6379"
     volumes:
       - redis_data:/data
     networks:
@@ -93,8 +94,8 @@ services:
   qdrant:
     image: qdrant/qdrant:v1.15.4
     ports:
-      - "6333:6333"
-      - "6334:6334"
+      - "127.0.0.1:${QDRANT_HTTP_PORT:-6333}:6333"
+      - "127.0.0.1:${QDRANT_GRPC_PORT:-6334}:6334"
     volumes:
       - qdrant_data:/qdrant/storage
     networks:
@@ -128,14 +129,21 @@ services:
     stop_grace_period: 330s
 
   flower:
+    profiles: ["flower"]
     build: *api-build
     working_dir: /app/api
     environment:
       REDIS_URL: ${REDIS_URL:-redis://redis:6379/0}
-      FLOWER_UNAUTHENTICATED_API: "true"
-    command: ["celery", "-A", "services.celery_app", "flower", "--port=5555", "--persistent=True", "--db=/var/lib/flower/flower"]
+      FLOWER_BASIC_AUTH: ${FLOWER_BASIC_AUTH:-}
+    command:
+      - sh
+      - -c
+      - >-
+        test -n "$$FLOWER_BASIC_AUTH" || { echo 'FLOWER_BASIC_AUTH is required' >&2; exit 1; };
+        exec celery -A services.celery_app flower --port=5555 --persistent=True
+        --db=/var/lib/flower/flower --basic_auth="$$FLOWER_BASIC_AUTH"
     ports:
-      - "5555:5555"
+      - "127.0.0.1:${FLOWER_PORT:-5555}:5555"
     volumes:
       - flower_data:/var/lib/flower
     networks:

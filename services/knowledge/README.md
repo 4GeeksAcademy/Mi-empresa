@@ -68,8 +68,14 @@ resolving the failure. Run only one indexer at a time in development.
 ## Retrieval, API, UI and evaluation
 
 The retrieval/generation pipeline is in `pipeline.py`. It embeds the question,
-retrieves up to five points, filters by cosine score (default 0.35), and asks a
-distinct chat model to answer only from cited evidence. `POST /knowledge/query`
+retrieves up to five points, filters by cosine score (default 0.35), and serializes
+retrieved source/section/text fields as JSON data in a separate user message. The
+system policy says that both the question and retrieved text are untrusted data,
+not instructions, and asks the distinct chat model to answer only from cited
+evidence. Regression tests inspect this prompt structure with adversarial strings
+using a mocked provider. Prompt wording and JSON framing are defense-in-depth,
+not a guarantee that a live model/provider resists prompt injection; adversarial
+provider evaluation remains pending. `POST /knowledge/query`
 is authenticated; the backoffice page is `/knowledge`. The endpoint reuses this
 RAG domain pipeline directly. `data/pipelines/pipeline.py` is the separate
 Prefect/SQL business-KPI ETL, not a RAG pipeline; importing it here would couple

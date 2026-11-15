@@ -175,6 +175,8 @@ class ResourceChallenge(BaseHTTPMiddleware):
 
 def create_app(settings: ServerSettings | None = None) -> Starlette:
     settings = settings or ServerSettings.from_environment()
+    if settings.backend_token is None or not settings.backend_token.get_secret_value():
+        raise ValueError("TRACKFLOW_MCP_BACKEND_TOKEN is required for authenticated backend access.")
     discovery_url = settings.issuer.rstrip("/") + "/.well-known/openid-configuration"
     with httpx.Client(timeout=5.0, follow_redirects=False, trust_env=False) as client:
         response = client.get(discovery_url)
@@ -202,7 +204,10 @@ def create_app(settings: ServerSettings | None = None) -> Starlette:
         return info
 
     origin = urlsplit(settings.resource_url)
-    mcp = create_tools(auth, TrackFlowBackend(settings.backend_url))
+    mcp = create_tools(
+        auth,
+        TrackFlowBackend(settings.backend_url, settings.backend_token.get_secret_value()),
+    )
     protected_app = mcp.http_app(
         path="/mcp", stateless_http=True,
         allowed_hosts=[origin.netloc],

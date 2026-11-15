@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 
-from auth import get_current_user
+from auth import get_current_admin, get_current_staff
 from database import get_suppliers_repository
 from models import (
     SupplierCategory,
@@ -29,7 +29,7 @@ class SupplierDeleteResponse(BaseModel):
 @router.post("", response_model=SupplierResponse, status_code=status.HTTP_201_CREATED)
 def create_supplier(
     payload: SupplierCreateInput,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
@@ -45,6 +45,7 @@ def create_supplier(
 
 @router.get("", response_model=list[SupplierResponse])
 def list_suppliers(
+    current_user: dict = Depends(get_current_staff),
     pais: SupplierCountry | None = Query(default=None),
     categoria: SupplierCategory | None = Query(default=None),
     country: SupplierCountry | None = Query(default=None),
@@ -71,7 +72,10 @@ def list_suppliers(
 
 
 @router.get("/{supplier_id}", response_model=SupplierResponse)
-def get_supplier(supplier_id: int) -> SupplierResponse:
+def get_supplier(
+    supplier_id: int,
+    current_user: dict = Depends(get_current_staff),
+) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
         supplier = repo.get(supplier_id)
@@ -89,7 +93,7 @@ def get_supplier(supplier_id: int) -> SupplierResponse:
 def update_supplier_rate(
     supplier_id: int,
     payload: SupplierRateUpdateInput,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
@@ -109,7 +113,7 @@ def update_supplier_rate(
 def update_supplier_status(
     supplier_id: int,
     payload: SupplierStatusUpdateInput,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> SupplierResponse:
     repo = get_suppliers_repository()
     try:
@@ -131,7 +135,7 @@ def update_supplier_status(
 @router.delete("/{supplier_id}", response_model=SupplierDeleteResponse)
 def delete_supplier(
     supplier_id: int,
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_admin),
 ) -> SupplierDeleteResponse:
     repo = get_suppliers_repository()
     try:

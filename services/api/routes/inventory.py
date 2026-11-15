@@ -3,7 +3,7 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlmodel import Session, func, select
 
-from auth import get_current_user
+from auth import get_current_staff, get_current_staff_or_mcp
 from database import get_db
 from models import InboundOrder, OutboundOrder, Product
 from telemetry import emit, stock_threshold
@@ -51,7 +51,11 @@ def _current_stock(db: Session, product_id: int) -> int:
     return (inbound_total or 0) - (outbound_total or 0)
 
 
-@router.get("/products", response_model=list[ProductResponse])
+@router.get(
+    "/products",
+    response_model=list[ProductResponse],
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def list_products(db: Session = Depends(get_db)) -> list[ProductResponse]:
     products = db.exec(select(Product)).all()
     stock_by_product = _stock_by_product(db)
@@ -71,7 +75,7 @@ def list_products(db: Session = Depends(get_db)) -> list[ProductResponse]:
 def create_product(
     payload: ProductCreateInput,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> ProductResponse:
     existing = db.exec(
         select(Product).where(
@@ -99,7 +103,11 @@ def create_product(
     )
 
 
-@router.get("/products/{product_id}", response_model=ProductResponse)
+@router.get(
+    "/products/{product_id}",
+    response_model=ProductResponse,
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductResponse:
     product = db.get(Product, product_id)
     if product is None:
@@ -121,7 +129,7 @@ def get_product(product_id: int, db: Session = Depends(get_db)) -> ProductRespon
 def create_inbound_order(
     payload: InboundOrderCreateInput,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> InventoryOrderResponse:
     product = db.get(Product, payload.product_id)
     if product is None:
@@ -156,7 +164,7 @@ def create_inbound_order(
 def create_outbound_order(
     payload: OutboundOrderCreateInput,
     db: Session = Depends(get_db),
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_staff),
 ) -> InventoryOrderResponse:
     product = db.get(Product, payload.product_id)
     if product is None:
@@ -197,7 +205,7 @@ def create_outbound_order(
     )
 
 
-@router.get("/orders", response_model=list[InventoryOrderResponse])
+@router.get("/orders", response_model=list[InventoryOrderResponse], dependencies=[Depends(get_current_staff)])
 def list_orders(db: Session = Depends(get_db)) -> list[InventoryOrderResponse]:
     inbound_rows = db.exec(select(InboundOrder, Product).join(Product)).all()
     outbound_rows = db.exec(select(OutboundOrder, Product).join(Product)).all()

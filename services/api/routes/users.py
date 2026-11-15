@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter, Depends, HTTPException, status
 
-from auth import get_current_user, hash_password
+from auth import get_current_admin, get_current_user, hash_password
 from auth_db import get_user_repository, get_profile_repository
 from auth_models import (
     UserCreateInput,
@@ -35,7 +35,8 @@ def create_user(payload: UserCreateInput) -> RegistrationResponse:
     user_persistence = UserPersistence(
         email=payload.email.strip().lower(),
         hashed_password=hashed,
-        role=payload.role.value,
+        # Public registration must never choose an authorization role.
+        role=UserRole.USER.value,
         is_active=True,
         created_at=utc_now_iso(),
     )
@@ -58,9 +59,9 @@ def create_user(payload: UserCreateInput) -> RegistrationResponse:
 
 @router.get("", response_model=list[UserResponse])
 def list_users(
-    current_user: dict = Depends(get_current_user),
+    current_user: dict = Depends(get_current_admin),
 ) -> list[UserResponse]:
-    """Listar todos los usuarios (protegida)."""
+    """Listar usuarios; reservado para administradores."""
     repo = get_user_repository()
     return repo.list()
 
@@ -75,6 +76,8 @@ def get_user(
     user = repo.get(user_id)
     if user is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+    if current_user["id"] != user_id and current_user["role"] != UserRole.ADMIN.value:
+        raise HTTPException(status_code=403, detail="No tienes permiso para consultar este usuario.")
     return user
 
 
@@ -159,6 +162,12 @@ def delete_user(
     existing = repo.get(user_id)
     if existing is None:
         raise HTTPException(status_code=404, detail="Usuario no encontrado.")
+
+    if current_user["id"] != user_id and current_user["role"] != UserRole.ADMIN.value:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="No tienes permiso para eliminar este usuario.",
+        )
 
     # Eliminar perfil vinculado
     profile_repo.delete_by_user_id(user_id)

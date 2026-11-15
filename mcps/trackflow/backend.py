@@ -20,8 +20,9 @@ T = TypeVar("T")
 
 
 class TrackFlowBackend:
-    def __init__(self, base_url: str) -> None:
+    def __init__(self, base_url: str, backend_token: str | None = None) -> None:
         self.base_url = base_url.rstrip("/")
+        self.backend_token = backend_token
 
     async def _request(
         self,
@@ -51,8 +52,14 @@ class TrackFlowBackend:
             async with httpx.AsyncClient(
                 timeout=5.0, follow_redirects=False, trust_env=False,
             ) as client:
+                headers = (
+                    {"X-TrackFlow-MCP-Token": self.backend_token}
+                    if self.backend_token
+                    else None
+                )
                 response = await client.request(
                     method, self.base_url + path, params=params, json=payload,
+                    headers=headers,
                 )
         except httpx.TimeoutException as exc:
             raise ToolError("BACKEND_TIMEOUT: backend did not respond in time.") from exc

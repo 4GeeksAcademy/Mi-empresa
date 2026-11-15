@@ -45,6 +45,7 @@ El modulo app importa funciones y datos desde:
 	- `/backoffice/inventory/orders/outbound`
 	- `/backoffice/inventory/orders`
 - La integración con la API está centralizada en `lib/inventory.ts` y envía el token JWT como `Authorization: Bearer <token>`.
+- Los proxies del backoffice propagan el bearer entrante mediante `lib/backend-fetch.ts`; las rutas API siguen validando usuario y rol en FastAPI.
 - El frontend marca como stock bajo cualquier valor de `current_stock` menor o igual a 10 unidades. Es un umbral operativo de alerta visual; la API sigue siendo la fuente de verdad para impedir salidas superiores al stock real.
 
 ## Captura de telemetria

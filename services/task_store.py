@@ -2,13 +2,18 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 import sqlite3
 from contextlib import contextmanager
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import BinaryIO
 from uuid import UUID
+
+MAX_UPLOAD_BYTES = 10 * 1024 * 1024
+
+
+class UploadTooLargeError(ValueError):
+    """Raised when an uploaded CSV exceeds its configured byte limit."""
 
 
 def storage_dir() -> Path:
@@ -43,11 +48,27 @@ def connection():
         database.close()
 
 
-def create_upload(task_id: str, owner: str, filename: str, source: BinaryIO) -> None:
+def create_upload(
+    task_id: str,
+    owner: str,
+    filename: str,
+    source: BinaryIO,
+    *,
+    max_bytes: int = MAX_UPLOAD_BYTES,
+) -> None:
+    if max_bytes < 1:
+        raise ValueError("El límite de carga debe ser mayor que cero.")
     path = task_path(task_id, "csv")
     try:
         with path.open("xb") as destination:
-            shutil.copyfileobj(source, destination)
+            total = 0
+            while chunk := source.read(min(64 * 1024, max_bytes + 1 - total)):
+                total += len(chunk)
+                if total > max_bytes:
+                    raise UploadTooLargeError(
+                        f"El fichero supera el límite de {max_bytes} bytes."
+                    )
+                destination.write(chunk)
         if path.stat().st_size == 0:
             raise ValueError("El fichero CSV esta vacio.")
         with connection() as database:
@@ -85,11 +106,12 @@ def complete_job(task_id: str, result: dict, export: bytes) -> None:
         )
 
 
-def latest_export() -> bytes | None:
+def latest_export(owner: str) -> bytes | None:
     with connection() as database:
         row = database.execute(
-            "SELECT task_id FROM tasks WHERE result IS NOT NULL "
-            "ORDER BY completed_at DESC LIMIT 1"
+            "SELECT task_id FROM tasks WHERE owner = ? AND result IS NOT NULL "
+            "ORDER BY completed_at DESC LIMIT 1",
+            (owner,),
         ).fetchone()
     return task_path(row["task_id"], "export.csv").read_bytes() if row else None
 

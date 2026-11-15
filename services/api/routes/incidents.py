@@ -1,6 +1,8 @@
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+
+from auth import get_current_staff, get_current_staff_or_mcp
 
 from incidents.models import (
     IncidentCreate,
@@ -16,7 +18,12 @@ from telemetry import emit
 router = APIRouter(prefix="/api/incidents", tags=["incidents"])
 
 
-@router.post("", response_model=IncidentResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "",
+    response_model=IncidentResponse,
+    status_code=status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def create_incident(payload: IncidentCreate) -> IncidentResponse:
     """Crea una nueva incidencia."""
     repo = get_incidents_repository()
@@ -34,7 +41,10 @@ def create_incident(payload: IncidentCreate) -> IncidentResponse:
     return created
 
 
-@router.get("", response_model=list[IncidentResponse])
+@router.get(
+    "", response_model=list[IncidentResponse],
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def list_incidents(
     status_param: str | None = Query(default=None, alias="status"),
     origin: str | None = Query(default=None),
@@ -72,7 +82,10 @@ def list_incidents(
     return incidents
 
 
-@router.get("/summary", response_model=IncidentSummaryResponse)
+@router.get(
+    "/summary", response_model=IncidentSummaryResponse,
+    dependencies=[Depends(get_current_staff)],
+)
 def get_summary() -> IncidentSummaryResponse:
     """Devuelve metricas agregadas de incidencias."""
     repo = get_incidents_repository()
@@ -91,7 +104,10 @@ def get_summary() -> IncidentSummaryResponse:
     return IncidentSummaryResponse.model_validate(summary)
 
 
-@router.get("/{incident_id}", response_model=IncidentResponse)
+@router.get(
+    "/{incident_id}", response_model=IncidentResponse,
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def get_incident(incident_id: int) -> IncidentResponse:
     """Devuelve el detalle de una incidencia por ID."""
     repo = get_incidents_repository()
@@ -110,7 +126,10 @@ def get_incident(incident_id: int) -> IncidentResponse:
     return incident
 
 
-@router.patch("/{incident_id}/status", response_model=IncidentResponse)
+@router.patch(
+    "/{incident_id}/status", response_model=IncidentResponse,
+    dependencies=[Depends(get_current_staff_or_mcp)],
+)
 def update_incident_status(
     incident_id: int,
     payload: IncidentStatusUpdate,

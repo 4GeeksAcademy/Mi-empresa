@@ -36,6 +36,8 @@ este servidor no emite tokens ni implementa login.
 | `TRACKFLOW_MCP_ISSUER` | Obligatoria. Issuer exacto anunciado por OIDC discovery. |
 | `TRACKFLOW_MCP_RESOURCE_URL` | Obligatoria. Audiencia y URL del MCP, terminada en `/mcp`. |
 | `TRACKFLOW_MCP_BACKEND_URL` | Backend interno existente; default `http://localhost:8000`. |
+| `TRACKFLOW_MCP_BACKEND_TOKEN` | Obligatoria en MCP. Credencial de servicio MCP→API, enviada como `X-TrackFlow-MCP-Token`; debe coincidir con `TRACKFLOW_INTERNAL_SERVICE_TOKEN` en la API. |
+| API `TRACKFLOW_INTERNAL_SERVICE_TOKEN` | Obligatoria para habilitar la identidad MCP. Debe configurarse en el proceso backend con el mismo secreto. |
 | `TRACKFLOW_MCP_HOST` | Default `127.0.0.1`; usar `0.0.0.0` en Codespaces. |
 | `TRACKFLOW_MCP_PORT` | Default `8001`. |
 | `TRACKFLOW_MCP_ALLOWED_ORIGINS` | Lista JSON de origenes de navegador autorizados; default `[]`. Sin paths ni comodines. |
@@ -48,21 +50,37 @@ Ejemplo **sin secretos** (sustituir dominios):
 export TRACKFLOW_MCP_ISSUER='https://auth.example.com/oidc'
 export TRACKFLOW_MCP_RESOURCE_URL='https://mcp.example.com/mcp'
 export TRACKFLOW_MCP_BACKEND_URL='http://localhost:8000'
+# Configurar TRACKFLOW_MCP_BACKEND_TOKEN fuera del repositorio mediante el
+# gestor de secretos del entorno; no imprimirlo ni pegarlo en la terminal.
 export TRACKFLOW_MCP_HOST='0.0.0.0'
 uv run python -m mcps.trackflow.server
 ```
 
 No se cargan archivos de entorno implicitamente. Variables ausentes, discovery
-invalido, issuer inconsistente o ausencia de JWKS impiden arrancar; no hay modo
-anonimo ni token de desarrollo por defecto. HTTPS obligatorio excepto loopback.
-Mantener el backend privado: los GET y las rutas de incidencias existentes no
-estan protegidos por el OAuth de este servidor.
+invalido, issuer inconsistente, ausencia de JWKS o ausencia del token backend
+impiden arrancar; no hay modo anonimo ni token de desarrollo por defecto. HTTPS
+obligatorio excepto loopback. La API valida el token interno solo para las
+operaciones MCP necesarias de incidencias y lectura de productos; pedidos,
+proveedores y mutaciones de inventario quedan excluidos. Los JWT OAuth de
+clientes MCP no se reenvian al backend.
+
+Configurar `TRACKFLOW_INTERNAL_SERVICE_TOKEN` en el entorno del backend y
+`TRACKFLOW_MCP_BACKEND_TOKEN` en el proceso MCP con el mismo valor obtenido del
+gestor de secretos. No versionar ni imprimir ninguno de los dos.
+
+En Docker Compose, el backend requiere `TRACKFLOW_INTERNAL_SERVICE_TOKEN` en el
+entorno que ejecuta Compose (o en el `.env` local no versionado, si esa es la
+política del equipo). El servidor MCP no es un servicio del Compose raíz: debe
+recibir `TRACKFLOW_MCP_BACKEND_TOKEN` en el entorno seguro de su propio proceso.
+No añadas los valores a `docker-compose.yml` ni a comandos guardados en el shell.
 
 MCP Auth valida firma asimetrica, issuer, audiencia y scope global `mcp:access`.
 Ademas se exige `exp` vigente sin tolerancia para tokens caducados. El algoritmo
 no se toma del cliente: se usa la allowlist asimetrica de MCP Auth.
-Los tokens del cliente nunca se reenvian al backend. Inventario solo utiliza GET
-y no recibe credenciales capaces de crear productos o movimientos.
+Los tokens del cliente nunca se reenvian al backend. El token interno solo
+existe en el proceso MCP y no concede rol admin: el backend lo limita por método
+y ruta a incidencias y lectura de productos. Inventario solo utiliza GET y no
+recibe credenciales capaces de crear productos o movimientos.
 
 ### Protected Resource Metadata y discovery
 
