@@ -16,6 +16,7 @@ from services.support_agent.incidents import (
     FALLBACK, IncidentQuery, IncidentResult, failure, format_incidents, query_incidents,
 )
 from services.support_agent.routing import decide_sources
+from services.support_agent.input_validation import normalize_question
 
 logger = logging.getLogger("trackflow_api.support_agent")
 
@@ -66,7 +67,7 @@ def receive_question(state: AgentInput) -> AgentState:
     question = state.get("question")
     if not isinstance(question, str):
         raise ValueError("La pregunta debe ser un texto.")
-    normalized_question = question.strip()
+    normalized_question = normalize_question(question)
     decision = decide_sources(normalized_question)
     memory_context = state.get("memory_context", [])
     if not isinstance(memory_context, list) or not all(

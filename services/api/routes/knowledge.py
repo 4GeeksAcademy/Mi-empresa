@@ -6,6 +6,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, ConfigDict, Field
 
 from auth import get_current_user
+from llm_security import enforce_llm_rate_limit
 from services.knowledge.pipeline import query
 
 logger = logging.getLogger("trackflow_api.knowledge")
@@ -24,7 +25,11 @@ class KnowledgeQueryResponse(BaseModel):
     answer: str
 
 
-@router.post("/query", response_model=KnowledgeQueryResponse)
+@router.post(
+    "/query",
+    response_model=KnowledgeQueryResponse,
+    dependencies=[Depends(enforce_llm_rate_limit)],
+)
 def query_knowledge(
     request: KnowledgeQueryRequest,
     current_user: dict = Depends(get_current_user),

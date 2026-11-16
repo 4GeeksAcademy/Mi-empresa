@@ -5,13 +5,15 @@ from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 from auth import get_current_user
+from llm_security import enforce_llm_rate_limit
 from services.support_agent.execution import AgentExecutionError, execute_agent
 from services.support_agent.graph import CompiledStateGraph
 from services.support_agent.memory import AgentMemoryStore
 from services.support_agent.traces import AgentTraceStore
+from services.support_agent.input_validation import normalize_question
 
 router = APIRouter(prefix="/agent", tags=["agent"])
 
@@ -20,6 +22,11 @@ class AgentQueryRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     question: str = Field(min_length=1, max_length=2000)
+
+    @field_validator("question")
+    @classmethod
+    def reject_control_characters(cls, question: str) -> str:
+        return normalize_question(question)
 
 
 class MemoryProposalResponse(BaseModel):
@@ -75,6 +82,7 @@ def _agent_memory(request: Request) -> AgentMemoryStore:
     "/query",
     response_model=AgentQueryResponse,
     responses={422: {"model": AgentErrorResponse}, 503: {"model": AgentErrorResponse}},
+    dependencies=[Depends(enforce_llm_rate_limit)],
 )
 def query_agent(
     request: AgentQueryRequest,
