@@ -37,6 +37,7 @@ from routes.users import router as users_router
 from routes.telemetry import router as telemetry_router
 from routes.knowledge import router as knowledge_router
 from routes.agent import router as agent_router
+from rate_limit import InMemoryRateLimiter
 from routes.rfp import router as rfp_router
 from services.support_agent.graph import open_agent_graph
 from services.support_agent.memory import AgentMemoryStore
@@ -64,6 +65,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
         app.state.agent_graph = graph
         app.state.agent_traces = traces
         app.state.agent_memory = memory
+        app.state.llm_rate_limiter = InMemoryRateLimiter()
         app.state.chat_hub = ChatHub(data_directory / "agent.sqlite3")
         try:
             yield
@@ -76,6 +78,7 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
 
 
 app = FastAPI(title="TrackFlow Incidents API", version="1.0.0", lifespan=lifespan)
+app.state.llm_rate_limiter = InMemoryRateLimiter()
 
 
 @app.middleware("http")
